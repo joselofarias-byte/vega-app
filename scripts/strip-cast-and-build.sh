@@ -13,13 +13,22 @@ git show "${CAST_COMMIT}^:src/screens/home/Player.tsx" \
 git show "${CAST_COMMIT}^:src/components/navigation/StreamingTabBar.tsx" \
   > src/components/navigation/StreamingTabBar.tsx
 
-rm -f src/components/CastRemotePlayer.tsx
-
 python3 <<'PY'
 from pathlib import Path
 
-path = Path('app.config.js')
-raw = path.read_bytes()
+player = Path('src/screens/home/Player.tsx')
+raw = player.read_bytes()
+newline = b'\r\n' if b'\r\n' in raw else b'\n'
+lines = raw.replace(b'\r\n', b'\n').splitlines()
+obsolete = {
+    b"// import {CastButton, useRemoteMediaClient} from 'react-native-google-cast';",
+    b"// import GoogleCast from 'react-native-google-cast';",
+}
+filtered = [line for line in lines if line.strip() not in obsolete]
+player.write_bytes(newline.join(filtered) + newline)
+
+config = Path('app.config.js')
+raw = config.read_bytes()
 block = (
     "    [\n"
     "      'react-native-google-cast',\n"
@@ -33,9 +42,10 @@ matches = [(candidate, raw.count(candidate)) for candidate in candidates]
 found = [(candidate, count) for candidate, count in matches if count]
 if len(found) != 1 or found[0][1] != 1:
     raise SystemExit(f'Bloque Cast inesperado en app.config.js: {matches}')
-path.write_bytes(raw.replace(found[0][0], b'', 1))
+config.write_bytes(raw.replace(found[0][0], b'', 1))
 PY
 
+rm -f src/components/CastRemotePlayer.tsx
 rm -f \
   .github/workflows/strip-cast-pr.yml \
   scripts/strip-cast-and-build.sh
