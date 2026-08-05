@@ -1,0 +1,51 @@
+name: Language preferences validation
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/language-preferences-check.yml'
+      - '__tests__/languagePreferences.test.ts'
+      - 'src/lib/hooks/useStream.ts'
+      - 'src/lib/languagePreferences.ts'
+      - 'src/lib/storage/languagePreferencesStorage.ts'
+      - 'src/screens/settings/Preference.tsx'
+      - 'src/screens/settings/components/LanguagePreferencesSection.tsx'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Run focused Jest tests
+        run: npm test -- --runInBand __tests__/languagePreferences.test.ts
+
+      - name: Run ESLint on changed sources
+        run: >-
+          npx eslint
+          src/lib/hooks/useStream.ts
+          src/lib/languagePreferences.ts
+          src/lib/storage/languagePreferencesStorage.ts
+          src/screens/settings/Preference.tsx
+          src/screens/settings/components/LanguagePreferencesSection.tsx
+          __tests__/languagePreferences.test.ts
+
+      - name: Run TypeScript check
+        run: npx tsc --noEmit --pretty false
