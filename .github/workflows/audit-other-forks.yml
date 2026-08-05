@@ -1,0 +1,108 @@
+name: Audit telemetry across Android forks
+
+on:
+  push:
+    branches:
+      - audit-other-forks
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Audit public Android forks
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IFS=$'\n\t'
+
+          readonly OWNER='joselofarias-byte'
+          readonly WORK="$RUNNER_TEMP/fork-telemetry-audit"
+          readonly REPORT="$RUNNER_TEMP/telemetry-audit.txt"
+
+          repos=(
+            AdAway-Community
+            cally
+            Ever-Call-Recorder
+            Inure
+            NewTermux
+            Nightzuku
+            OBLITERATUS
+            ShizuCallRecorder
+            Shizuku
+            ShizukuCrimson
+            ShizukuPlus
+            Stellar
+          )
+
+          mkdir -p "$WORK"
+          : >"$REPORT"
+
+          signatures='firebase-analytics|firebase-crashlytics|firebase-perf|com\.google\.firebase\.crashlytics|com\.google\.firebase\.firebase-perf|@react-native-firebase/(analytics|crashlytics|perf)|io\.sentry|sentry-android|sentry-react-native|appcenter-(analytics|crashes)|com\.microsoft\.appcenter|bugsnag|amplitude|mixpanel|posthog|telemetrydeck|aptabase|matomo|countly|acra|FirebaseAnalytics|FirebaseCrashlytics|Sentry\.init|AppCenter\.start|Bugsnag\.start|Amplitude|getInstance\(.*Analytics|setAnalyticsCollectionEnabled|setCrashlyticsCollectionEnabled|analytics_collection_enabled|crashlytics_collection_enabled'
+
+          for repo in "${repos[@]}"; do
+            dir="$WORK/$repo"
+            printf '\n===== %s/%s =====\n' "$OWNER" "$repo" | tee -a "$REPORT"
+
+            if ! git clone --quiet --depth 1 "https://github.com/$OWNER/$repo.git" "$dir"; then
+              printf 'CLONE_FAILED\n' | tee -a "$REPORT"
+              continue
+            fi
+
+            branch="$(git -C "$dir" branch --show-current || true)"
+            commit="$(git -C "$dir" rev-parse HEAD)"
+            printf 'branch=%s\ncommit=%s\n' "$branch" "$commit" | tee -a "$REPORT"
+
+            if [[ ! -f "$dir/gradlew" && ! -f "$dir/settings.gradle" && ! -f "$dir/settings.gradle.kts" && ! -f "$dir/app/build.gradle" && ! -f "$dir/app/build.gradle.kts" ]]; then
+              printf 'ANDROID_PROJECT=no\n' | tee -a "$REPORT"
+            else
+              printf 'ANDROID_PROJECT=yes\n' | tee -a "$REPORT"
+            fi
+
+            mapfile -t matches < <(
+              rg -n -i --hidden \
+                --glob '!.git/**' \
+                --glob '!**/build/**' \
+                --glob '!**/.gradle/**' \
+                --glob '!**/node_modules/**' \
+                --glob '!**/vendor/**' \
+                --glob '!**/third_party/**' \
+                --glob '!**/generated/**' \
+                --glob '!**/*.lock' \
+                --glob '!**/package-lock.json' \
+                "$signatures" "$dir" 2>/dev/null || true
+            )
+
+            if ((${#matches[@]} == 0)); then
+              printf 'TELEMETRY_MATCHES=0\n' | tee -a "$REPORT"
+            else
+              printf 'TELEMETRY_MATCHES=%s\n' "${#matches[@]}" | tee -a "$REPORT"
+              printf '%s\n' "${matches[@]#"$dir/"}" | tee -a "$REPORT"
+            fi
+
+            printf '%s\n' '--- Google/Firebase configuration references ---' | tee -a "$REPORT"
+            rg -n -i --hidden \
+              --glob '!.git/**' \
+              --glob '!**/build/**' \
+              --glob '!**/.gradle/**' \
+              --glob '!**/node_modules/**' \
+              --glob '!**/vendor/**' \
+              --glob '!**/third_party/**' \
+              'google-services\.json|com\.google\.gms\.google-services|firebase-(messaging|config|auth|database|firestore|storage)|FirebaseMessaging|FirebaseRemoteConfig' \
+              "$dir" 2>/dev/null | sed "s#^$dir/##" | tee -a "$REPORT" || true
+          done
+
+          printf '\n===== SUMMARY =====\n' | tee -a "$REPORT"
+          awk '/^===== joselofarias-byte\//{repo=$0} /^TELEMETRY_MATCHES=/{print repo " " $0}' "$REPORT" | tee -a "$REPORT"
+
+          cp "$REPORT" "$GITHUB_WORKSPACE/telemetry-audit.txt"
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: telemetry-audit
+          path: telemetry-audit.txt
+          if-no-files-found: error
+          retention-days: 7
