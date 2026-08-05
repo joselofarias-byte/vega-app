@@ -275,7 +275,7 @@ export const getLanguageCompatibilityScore = (
     }
   });
 
-  if (languages.hasMetadata) score += 10;
+  if (languages.hasMetadata && score > 0) score += 10;
   return score;
 };
 
