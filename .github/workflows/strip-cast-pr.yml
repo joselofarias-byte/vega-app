@@ -1,0 +1,54 @@
+name: Remove Cast telemetry and build APK
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  strip-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8
+      MYAPP_UPLOAD_STORE_PASSWORD: telemetryfree
+      MYAPP_UPLOAD_KEY_ALIAS: vega-telemetry-free
+      MYAPP_UPLOAD_KEY_PASSWORD: telemetryfree
+
+    steps:
+      - name: Check out telemetry branch
+        uses: actions/checkout@v4
+        with:
+          ref: remove-telemetry-v2
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Remove Cast telemetry and build
+        shell: bash
+        run: bash scripts/strip-cast-and-build.sh
+
+      - name: Upload verified APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vega-4.0.3-sin-telemetria-release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
