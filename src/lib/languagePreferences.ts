@@ -38,6 +38,12 @@ export const COMMON_LANGUAGE_OPTIONS = [
   {tag: 'it', label: 'Italiano'},
   {tag: 'ja', label: '日本語'},
   {tag: 'ko', label: '한국어'},
+  {tag: 'zh', label: '中文'},
+  {tag: 'hi', label: 'हिन्दी'},
+  {tag: 'ar', label: 'العربية'},
+  {tag: 'ru', label: 'Русский'},
+  {tag: 'tr', label: 'Türkçe'},
+  {tag: 'pl', label: 'Polski'},
 ] as const;
 
 export const LANGUAGE_PRESETS: LanguageProfile[] = [
@@ -46,20 +52,20 @@ export const LANGUAGE_PRESETS: LanguageProfile[] = [
     name: 'Español latino',
     preferredAudio: ['es-419', 'es', 'es-ES'],
     preferredSubtitles: ['es-419', 'es', 'es-ES'],
-    mode: 'strict',
+    mode: 'balanced',
     allowOriginalAudio: false,
     allowAudioWithPreferredSubtitles: true,
-    allowUnknown: false,
+    allowUnknown: true,
   },
   {
     id: 'spanish-spain',
     name: 'Español de España',
     preferredAudio: ['es-ES', 'es', 'es-419'],
     preferredSubtitles: ['es-ES', 'es', 'es-419'],
-    mode: 'strict',
+    mode: 'balanced',
     allowOriginalAudio: false,
     allowAudioWithPreferredSubtitles: true,
-    allowUnknown: false,
+    allowUnknown: true,
   },
   {
     id: 'english',
@@ -119,7 +125,22 @@ const ALIASES: Record<string, string> = {
   italian: 'it',
   italiano: 'it',
   japanese: 'ja',
+  japonés: 'ja',
+  japones: 'ja',
   korean: 'ko',
+  coreano: 'ko',
+  chinese: 'zh',
+  chino: 'zh',
+  hindi: 'hi',
+  arabic: 'ar',
+  árabe: 'ar',
+  arabe: 'ar',
+  russian: 'ru',
+  ruso: 'ru',
+  turkish: 'tr',
+  turco: 'tr',
+  polish: 'pl',
+  polaco: 'pl',
   unknown: 'und',
   undefined: 'und',
 };
@@ -180,6 +201,12 @@ const inferFromText = (candidate: LanguageCandidate) => {
   if (/\b(italiano|italian)\b/i.test(text)) audio.push('it');
   if (/\b(japanese|japon[eé]s)\b/i.test(text)) audio.push('ja');
   if (/\b(korean|coreano)\b/i.test(text)) audio.push('ko');
+  if (/\b(chinese|mandarin|chino)\b/i.test(text)) audio.push('zh');
+  if (/\b(hindi)\b/i.test(text)) audio.push('hi');
+  if (/\b(arabic|árabe|arabe)\b/i.test(text)) audio.push('ar');
+  if (/\b(russian|ruso)\b/i.test(text)) audio.push('ru');
+  if (/\b(turkish|turco)\b/i.test(text)) audio.push('tr');
+  if (/\b(polish|polaco)\b/i.test(text)) audio.push('pl');
 
   if (/\b(sub(?:title|titulado)?s?[- ]?(?:es|esp|latino)|sub español|sub esp)\b/i.test(text)) {
     subtitles.push(/\b(latino|latam|es[- ]?419)\b/i.test(text) ? 'es-419' : 'es');
@@ -198,17 +225,18 @@ export const getCandidateLanguages = (candidate: LanguageCandidate) => {
   ]);
   const inferred = inferFromText(candidate);
   const originalLanguage = normalizeLanguageTag(candidate.originalLanguage);
+  const audio = explicitAudio.length > 0 ? explicitAudio : inferred.audio;
+  const subtitles =
+    explicitSubtitles.length > 0 ? explicitSubtitles : inferred.subtitles;
 
   return {
-    audio: uniqueTags([...explicitAudio, ...inferred.audio]),
-    subtitles: uniqueTags([...explicitSubtitles, ...inferred.subtitles]),
+    audio,
+    subtitles,
     originalLanguage,
     hasMetadata:
-      explicitAudio.length > 0 ||
-      explicitSubtitles.length > 0 ||
-      originalLanguage !== 'und' ||
-      inferred.audio.length > 0 ||
-      inferred.subtitles.length > 0,
+      audio.length > 0 ||
+      subtitles.length > 0 ||
+      originalLanguage !== 'und',
   };
 };
 
@@ -228,7 +256,8 @@ export const getLanguageCompatibilityScore = (
   if (
     profile.allowOriginalAudio &&
     languages.originalLanguage !== 'und' &&
-    (languages.audio.includes(languages.originalLanguage) || languages.audio.length === 0)
+    (languages.audio.includes(languages.originalLanguage) ||
+      languages.audio.length === 0)
   ) {
     score = Math.max(score, 750);
   }
