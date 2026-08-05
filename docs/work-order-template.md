@@ -1,5 +1,7 @@
 # Orden de trabajo — inteligencia de código
 
+> Referencia humana. Los agentes no deben copiar esta plantilla manualmente: `bash tools/llm-workflow.sh start ...` genera y completa la orden estándar, el respaldo y la evidencia.
+
 ## Identificación
 
 - Proyecto: Vega
@@ -18,8 +20,8 @@
 - [ ] `branches.txt`
 - [ ] `worktrees.txt`
 - [ ] `log.txt`
-- [ ] bundle Git
-- [ ] inventario de untracked
+- [ ] bundle Git verificado
+- [ ] archivo recuperable de untracked
 - [ ] manifiesto SHA-256
 - Ruta del respaldo:
 
@@ -52,7 +54,7 @@
 - [ ] compilación Android o Expo pertinente
 - [ ] comprobación funcional
 - [ ] análisis de impacto posterior
-- [ ] actualización de CodeGraph, si el cambio lo justifica
+- [ ] actualización de CodeGraph
 
 ## Resultado
 
@@ -68,4 +70,4 @@
 
 ## Regla de cierre
 
-La orden no se considera cerrada sólo porque CodeGraph no detecte problemas. Deben revisarse el diff, las pruebas y la compilación correspondientes. Ningún commit, push o merge se presume autorizado por esta plantilla.
+La orden no se considera cerrada sólo porque CodeGraph no detecte problemas. Deben revisarse el diff, las pruebas y la compilación correspondientes. Ningún commit, push o merge se presume autorizado. Los hooks bloquean commits sin una orden activa y agregan automáticamente la identificación de la orden y del agente.
