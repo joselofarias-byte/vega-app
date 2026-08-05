@@ -2,7 +2,6 @@ import {View, ScrollView, Pressable, ToastAndroid} from 'react-native';
 import React, {useState} from 'react';
 import {settingsStorage} from '../../lib/storage';
 import RNReactNativeHapticFeedback from 'react-native-haptic-feedback';
-import Constants from 'expo-constants';
 import DownloadLocationPreference from './components/DownloadLocationPreference';
 import useNavigationPreferencesStore from '../../lib/zustand/navigationPreferencesStore';
 import DownloadConcurrencyPreference from './components/DownloadConcurrencyPreference';
@@ -12,16 +11,8 @@ import SettingsSection from '../../components/ui/SettingsSection';
 import SettingsSwitchRow from '../../components/ui/SettingsSwitchRow';
 import Surface from '../../components/ui/Surface';
 import {useM3Colors} from '../../theme/M3PaletteContext';
-import {
-  getAnalytics,
-  getCrashlytics,
-  isFirebaseNativeReady,
-} from '../../lib/utils/firebaseSafe';
 
 const Preferences = () => {
-  const hasFirebase =
-    Boolean(Constants?.expoConfig?.extra?.hasFirebase) &&
-    isFirebaseNativeReady();
   const colors = useM3Colors();
   // const [showRecentlyWatched, setShowRecentlyWatched] = useState(
   //   settingsStorage.getBool('showRecentlyWatched') || false,
@@ -76,9 +67,6 @@ const Preferences = () => {
     settingsStorage.getBool('alwaysExternalDownloader') || false,
   );
 
-  const [telemetryOptIn, setTelemetryOptIn] = useState<boolean>(
-    settingsStorage.isTelemetryOptIn(),
-  );
 
   return (
     <ScrollView
@@ -162,37 +150,6 @@ const Preferences = () => {
           />
         </SettingsSection>
 
-        {hasFirebase ? (
-          <SettingsSection title="Privacy">
-            <SettingsSwitchRow
-              title="Usage and crash reports"
-              description="Help improve Vega with anonymous diagnostics"
-              value={telemetryOptIn}
-              divider={false}
-              onValueChange={async next => {
-                setTelemetryOptIn(next);
-                settingsStorage.setTelemetryOptIn(next);
-                try {
-                  const crashlytics = getCrashlytics();
-                  crashlytics &&
-                    (await crashlytics().setCrashlyticsCollectionEnabled(next));
-                } catch {}
-                try {
-                  const analytics = getAnalytics();
-                  analytics &&
-                    (await analytics().setAnalyticsCollectionEnabled(next));
-                  analytics &&
-                    (await analytics().setConsent({
-                      analytics_storage: next,
-                      ad_storage: next,
-                      ad_user_data: next,
-                      ad_personalization: next,
-                    }));
-                } catch {}
-              }}
-            />
-          </SettingsSection>
-        ) : null}
 
         <TmdbApiKeyPreference />
 

@@ -11,9 +11,7 @@ import useThemeStore from '../lib/zustand/themeStore';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Application from 'expo-application';
 import * as Updates from 'expo-updates';
-import Constants from 'expo-constants';
 import {showAppDialog} from '../lib/zustand/appDialogStore';
-import {getCrashlytics, isFirebaseNativeReady} from '../lib/utils/firebaseSafe';
 
 interface GlobalErrorBoundaryProps {
   children: React.ReactNode;
@@ -60,21 +58,6 @@ export default class GlobalErrorBoundary extends React.Component<
     // Log error details for debugging
     this.logErrorDetails(error, errorInfo);
 
-    // Report to Crashlytics
-    try {
-      const hasFirebase =
-        Boolean(Constants?.expoConfig?.extra?.hasFirebase) &&
-        isFirebaseNativeReady();
-      if (hasFirebase) {
-        const crashlytics = getCrashlytics();
-        crashlytics &&
-          crashlytics().setAttributes({
-            app_version: String(Application.nativeApplicationVersion || ''),
-            build_version: String(Application.nativeBuildVersion || ''),
-          });
-        crashlytics && crashlytics().recordError(error);
-      }
-    } catch {}
   }
 
   logErrorDetails = (error: Error, errorInfo: React.ErrorInfo) => {
