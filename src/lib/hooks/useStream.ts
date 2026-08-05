@@ -5,6 +5,11 @@ import {providerManager} from '../services/ProviderManager';
 import {settingsStorage} from '../storage';
 import {ifExists} from '../file/ifExists';
 import {Stream} from '../providers/types';
+import {
+  filterAndRankByLanguage,
+  LanguageCandidate,
+} from '../languagePreferences';
+import {languagePreferencesStorage} from '../storage/languagePreferencesStorage';
 
 interface UseStreamOptions {
   activeEpisode: any;
@@ -25,6 +30,8 @@ export const useStream = ({
     type: '',
   });
   const [externalSubs, setExternalSubs] = useState<any[]>([]);
+  const languageProfile = languagePreferencesStorage.getProfile();
+  const languageProfileKey = JSON.stringify(languageProfile);
 
   const {
     data: streamData = [],
@@ -32,7 +39,13 @@ export const useStream = ({
     error,
     refetch,
   } = useQuery<Stream[], Error>({
-    queryKey: ['stream', activeEpisode?.link, routeParams?.type, provider],
+    queryKey: [
+      'stream',
+      activeEpisode?.link,
+      routeParams?.type,
+      provider,
+      languageProfileKey,
+    ],
     queryFn: async () => {
       if (!activeEpisode?.link) {
         return [];
@@ -40,14 +53,14 @@ export const useStream = ({
 
       console.log('Fetching stream for:', activeEpisode);
 
-      // Handle direct URL (downloaded content)
+      // Local files are already selected by the user and have no reliable
+      // provider language metadata, so language filtering must not hide them.
       if (routeParams?.directUrl) {
         return [
           {server: 'Downloaded', link: routeParams.directUrl, type: 'mp4'},
         ];
       }
 
-      // Check for local downloaded file
       if (routeParams?.primaryTitle) {
         const file = (
           routeParams.primaryTitle +
@@ -61,7 +74,6 @@ export const useStream = ({
         }
       }
 
-      // Fetch streams from provider
       const controller = new AbortController();
       const data = await providerManager.getStream({
         link: activeEpisode.link,
@@ -70,56 +82,59 @@ export const useStream = ({
         providerValue: routeParams?.providerValue || provider,
       });
 
-      // Filter out excluded qualities
       const excludedQualities = settingsStorage.getExcludedQualities() || [];
       const filteredQualities = data?.filter(
         streamItem => !excludedQualities.includes(streamItem?.quality + 'p'),
       );
-
-      const filteredData =
+      const qualityCandidates =
         filteredQualities?.length > 0 ? filteredQualities : data;
 
+      const filteredData = filterAndRankByLanguage(
+        (qualityCandidates || []) as Array<Stream & LanguageCandidate>,
+        languageProfile,
+      );
+
       if (!filteredData || filteredData.length === 0) {
-        throw new Error('No streams available');
+        throw new Error(
+          'No streams match the selected audio and subtitle languages',
+        );
       }
 
       return filteredData;
     },
     enabled: enabled && !!activeEpisode?.link,
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 30 * 60 * 1000, // 30 minutes
-    retry: (failureCount, _error) => {
-      if (failureCount >= 2) {
-        return false;
-      }
-      return true;
-    },
+    staleTime: 5 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: failureCount => failureCount < 2,
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
     refetchOnMount: true,
     refetchOnWindowFocus: false,
   });
 
-  // Update selected stream when data changes
   useEffect(() => {
     if (streamData && streamData.length > 0) {
       setSelectedStream(current => {
         if (!current?.link) return streamData[0];
-        const stillExists = streamData.find(s => s.link === current.link);
+        const stillExists = streamData.find(stream => stream.link === current.link);
         return stillExists ? current : streamData[0];
       });
-
-      // Extract external subtitles
-      const subs: any[] = [];
-      streamData.forEach(track => {
-        if (track?.subtitles?.length && track.subtitles.length > 0) {
-          subs.push(...track.subtitles);
-        }
-      });
-      setExternalSubs(subs);
     }
   }, [streamData]);
 
-  // Handle errors
+  // Subtitles belong to the selected server. Mixing subtitle tracks from every
+  // server can show duplicates or tracks that are out of sync with playback.
+  useEffect(() => {
+    const subtitles = selectedStream?.subtitles || [];
+    const unique = new Map<string, any>();
+
+    subtitles.forEach(track => {
+      const key = `${track.uri}|${track.language}|${track.title}`;
+      if (!unique.has(key)) unique.set(key, track);
+    });
+
+    setExternalSubs(Array.from(unique.values()));
+  }, [selectedStream]);
+
   useEffect(() => {
     if (error) {
       console.error('Stream fetch error:', error);
@@ -156,7 +171,6 @@ export const useStream = ({
   };
 };
 
-// Hook for managing video tracks and settings
 export const useVideoSettings = () => {
   const [audioTracks, setAudioTracks] = useState<any[]>([]);
   const [textTracks, setTextTracks] = useState<any[]>([]);
@@ -197,7 +211,6 @@ export const useVideoSettings = () => {
   };
 
   const processVideoTracks = (tracks: any[]) => {
-
     if (!tracks || tracks.length === 0) {
       return;
     }
@@ -210,10 +223,9 @@ export const useVideoSettings = () => {
       }
       return false;
     });
-        console.log('Processing video tracks:', uniqueTracks);
+    console.log('Processing video tracks:', uniqueTracks);
     setVideoTracks(uniqueTracks);
   };
-
 
   const handleVideoLoad = (naturalSize?: {width?: number; height?: number}) => {
     if (!naturalSize?.height) {
@@ -225,12 +237,10 @@ export const useVideoSettings = () => {
     });
   };
 
-  // Clear everything when switching to a new stream/episode.
   const resetVideoTracks = () => {
     setVideoTracks([]);
     setLoadedVideoSize(null);
   };
-
 
   const effectiveVideoTracks = useMemo(() => {
     if (videoTracks.length > 0) {
