@@ -1,0 +1,189 @@
+name: Remove telemetry
+
+on:
+  push:
+    branches: [remove-telemetry]
+    paths: [.github/workflows/remove-telemetry.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  remove:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: remove-telemetry
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: npm
+
+      - name: Remove telemetry source and configuration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 <<'PY'
+          import re
+          from pathlib import Path
+
+          def edit(path, transform):
+              p = Path(path)
+              raw = p.read_bytes()
+              newline = '\r\n' if b'\r\n' in raw else '\n'
+              text = raw.decode('utf-8').replace('\r\n', '\n')
+              updated = transform(text)
+              p.write_bytes(updated.replace('\n', newline).encode('utf-8'))
+
+          def remove_unused_default_import(text, symbol, module):
+              pattern = re.compile(
+                  rf"^[ \\t]*import[ \\t]+{re.escape(symbol)}[ \\t]+from[ \\t]+['\"]{re.escape(module)}['\"];[ \\t]*\\n",
+                  re.MULTILINE,
+              )
+              body = pattern.sub('', text)
+              return body if not re.search(rf"\\b{re.escape(symbol)}\\b", body) else text
+
+          def app_config(text):
+              text = re.sub(
+                  r"\\Aconst fs = require\\(['\"]fs['\"]\\);\\s*const path = require\\(['\"]path['\"]\\);\\s*const androidGoogleServicesFile[\\s\\S]*?(?=const tmdbApiKey)",
+                  '', text, count=1,
+              )
+              text = re.sub(
+                  r"^[ \\t]*\\.\\.\\.\\(hasAndroidGoogleServices\\s*\\|\\|\\s*hasIosGooglePlist\\s*\\?\\s*\\[\\s*['\"]@react-native-firebase/(?:app|crashlytics)['\"]\\s*\\]\\s*:\\s*\\[\\s*\\]\\s*\\),[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"^[ \\t]*\\.\\.\\.\\(hasAndroidGoogleServices\\s*\\?\\s*\\{googleServicesFile:\\s*androidGoogleServicesFile\\}\\s*:\\s*\\{\\}\\s*\\),[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"^[ \\t]*ios:\\s*\\{\\s*\\.\\.\\.\\(hasIosGooglePlist\\s*\\?\\s*\\{googleServicesFile:\\s*iosGoogleServicesFile\\}\\s*:\\s*\\{\\}\\s*\\),\\s*\\},[ \\t]*\\n",
+                  '      ios: {},\\n', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"^[ \\t]*hasFirebase:\\s*hasAndroidGoogleServices\\s*\\|\\|\\s*hasIosGooglePlist,[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              return text
+
+          def app_tsx(text):
+              text = re.sub(
+                  r"^[ \\t]*import\\s*\\{\\s*getAnalytics,\\s*getCrashlytics,\\s*isFirebaseNativeReady,\\s*\\}\\s*from\\s*['\"]\\./lib/utils/firebaseSafe['\"];[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"^[ \\t]*const hasFirebase\\s*=\\s*Boolean\\(Constants\\?\\.expoConfig\\?\\.extra\\?\\.hasFirebase\\)\\s*&&\\s*isFirebaseNativeReady\\(\\);[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"\\n[ \\t]*// Apply telemetry preference before using analytics[\\s\\S]*?(?=\\n[ \\t]*const unsubscribe = notifee\\.onForegroundEvent)",
+                  '', text, count=1,
+              )
+              return remove_unused_default_import(text, 'Constants', 'expo-constants')
+
+          def preference(text):
+              text = re.sub(
+                  r"^[ \\t]*import\\s*\\{\\s*getAnalytics,\\s*getCrashlytics,\\s*isFirebaseNativeReady,\\s*\\}\\s*from\\s*['\"]\\.\\./\\.\\./lib/utils/firebaseSafe['\"];[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"^[ \\t]*const hasFirebase\\s*=\\s*Boolean\\(Constants\\?\\.expoConfig\\?\\.extra\\?\\.hasFirebase\\)\\s*&&\\s*isFirebaseNativeReady\\(\\);[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"\\n[ \\t]*const \\[telemetryOptIn,\\s*setTelemetryOptIn\\]\\s*=\\s*useState<boolean>\\(\\s*settingsStorage\\.isTelemetryOptIn\\(\\),\\s*\\);",
+                  '', text, count=1,
+              )
+              text = re.sub(
+                  r"\\n[ \\t]*\\{hasFirebase\\s*\\?\\s*\\([\\s\\S]*?\\)\\s*:\\s*null\\}\\s*(?=\\n[ \\t]*<TmdbApiKeyPreference\\s*/>)",
+                  '\\n', text, count=1,
+              )
+              return remove_unused_default_import(text, 'Constants', 'expo-constants')
+
+          def boundary(text):
+              text = re.sub(
+                  r"^[ \\t]*import\\s*\\{\\s*getCrashlytics,\\s*isFirebaseNativeReady\\s*\\}\\s*from\\s*['\"]\\.\\./lib/utils/firebaseSafe['\"];[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+              text = re.sub(
+                  r"\\n[ \\t]*// Report to Crashlytics\\s*try\\s*\\{[\\s\\S]*?\\}\\s*catch\\s*\\{\\}",
+                  '', text, count=1,
+              )
+              return remove_unused_default_import(text, 'Constants', 'expo-constants')
+
+          def settings(text):
+              text = re.sub(
+                  r"\\n[ \\t]*// Telemetry \\(privacy\\)\\s*\\n[ \\t]*TELEMETRY_OPT_IN\\s*=\\s*['\"]telemetryOptIn['\"],\\s*",
+                  '\\n', text, count=1,
+              )
+              text = re.sub(
+                  r"\\n[ \\t]*// Telemetry / Privacy\\s*\\n[ \\t]*isTelemetryOptIn\\(\\): boolean \\{[\\s\\S]*?\\n[ \\t]*setTelemetryOptIn\\(enabled: boolean\\): void \\{[\\s\\S]*?\\n[ \\t]*\\}\\s*",
+                  '\\n', text, count=1,
+              )
+              return text
+
+          def tests(text):
+              return re.sub(
+                  r"^[ \\t]*expect\\(settingsStorage\\.isTelemetryOptIn\\(\\)\\)\\.toBe\\(true\\);[ \\t]*\\n",
+                  '', text, flags=re.MULTILINE,
+              )
+
+          def gitignore(text):
+              text = re.sub(
+                  r"\\n?# firebase[ \\t]*\\n(?:google-services\\.json|GoogleService-Info\\.plist)[ \\t]*\\n?",
+                  '\\n', text, flags=re.IGNORECASE,
+              )
+              return re.sub(r"\\n{3,}", '\\n\\n', text)
+
+          edit('app.config.js', app_config)
+          edit('src/App.tsx', app_tsx)
+          edit('src/screens/settings/Preference.tsx', preference)
+          edit('src/components/GlobalErrorBoundary.tsx', boundary)
+          edit('src/lib/storage/SettingsStorage.ts', settings)
+          edit('__tests__/settingsStorage.test.ts', tests)
+          edit('.gitignore', gitignore)
+
+          for name in (
+              'src/lib/utils/firebaseSafe.ts',
+              'firebase.json',
+              'google-services.json',
+              'GoogleService-Info.plist',
+          ):
+              Path(name).unlink(missing_ok=True)
+          PY
+
+          npm uninstall --package-lock-only --ignore-scripts \
+            @react-native-firebase/analytics \
+            @react-native-firebase/app \
+            @react-native-firebase/crashlytics
+
+          rm -f .github/workflows/remove-telemetry.yml
+
+          forbidden='@react-native-firebase|firebaseSafe|hasFirebase|Crashlytics|crashlytics|TELEMETRY_OPT_IN|telemetryOptIn|isTelemetryOptIn|setTelemetryOptIn|analytics_storage|ad_storage|ad_user_data|ad_personalization|google-services\.json|GoogleService-Info\.plist'
+          if git grep -nEi "$forbidden" -- ':!node_modules'; then
+            echo 'Quedaron referencias de telemetría' >&2
+            exit 1
+          fi
+
+          git diff --check
+
+      - name: Install and test
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci
+          npm test -- --runInBand
+
+      - name: Commit verified removal
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add -A
+          git diff --cached --check
+          git commit -m 'chore: remove Firebase telemetry'
+          git push origin HEAD:remove-telemetry
