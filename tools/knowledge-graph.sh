@@ -27,7 +27,7 @@ usage() {
 Usage: tools/knowledge-graph.sh <command>
 
 Commands:
-  install    Install pinned CodeGraph, disable telemetry and register MCP.
+  install    Install pinned CodeGraph and register MCP integrations.
   index      Build or rebuild the local CodeGraph index.
   sync       Incrementally synchronize CodeGraph.
   status     Print installation and local index status.
@@ -83,7 +83,6 @@ install_codegraph() {
   fi
 
   require_command codegraph
-  codegraph telemetry off >/dev/null
   codegraph install --target=claude,codex,gemini --location=global --yes --no-permissions
   printf 'Installed CodeGraph %s.\n' "$CODEGRAPH_PIN"
 }
@@ -93,7 +92,10 @@ index_codegraph() {
   if [[ -d "$REPO_ROOT/.codegraph" ]]; then
     codegraph index "$REPO_ROOT" --force --quiet
   else
-    codegraph init "$REPO_ROOT"
+    (
+      cd "$REPO_ROOT"
+      codegraph init --index
+    )
   fi
 }
 
