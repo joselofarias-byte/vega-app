@@ -1,7 +1,6 @@
 import type {BottomTabBarProps} from '@react-navigation/bottom-tabs';
 import React from 'react';
 import {
-  Platform,
   StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
@@ -32,10 +31,6 @@ const StreamingTabBar = ({
   const {width: windowWidth} = useWindowDimensions();
   const isNavigationRail = windowWidth > 768;
   const showLabels = settingsStorage.showTabBarLabels();
-  const bottomBarPadding =
-    Platform.OS === 'android'
-      ? Math.min(Math.max(insets.bottom, 8), 20)
-      : Math.max(insets.bottom, 8);
 
   return (
     <View
@@ -46,10 +41,10 @@ const StreamingTabBar = ({
         height: isNavigationRail ? '100%' : undefined,
         paddingBottom: isNavigationRail
           ? Math.max(insets.bottom, 12)
-          : bottomBarPadding,
+          : Math.max(insets.bottom, 8),
         paddingLeft: isNavigationRail ? insets.left : 4,
         paddingRight: 4,
-        paddingTop: isNavigationRail ? Math.max(insets.top, 16) : 6,
+        paddingTop: isNavigationRail ? Math.max(insets.top, 16) : 10,
         width: isNavigationRail ? 96 + insets.left : undefined,
       }}>
       <View
@@ -58,7 +53,7 @@ const StreamingTabBar = ({
           flex: isNavigationRail ? 1 : undefined,
           flexDirection: isNavigationRail ? 'column' : 'row',
           gap: isNavigationRail ? 8 : undefined,
-          height: isNavigationRail ? undefined : showLabels ? 58 : 42,
+          height: isNavigationRail ? undefined : showLabels ? 64 : 44,
         }}>
         {state.routes.map((route, index) => {
           const descriptor = descriptors[route.key];
@@ -107,8 +102,8 @@ const StreamingTabBar = ({
                     ? 72
                     : 56
                   : showLabels
-                    ? 58
-                    : 42,
+                    ? 64
+                    : 44,
                 justifyContent: 'center',
                 minWidth: 48,
                 width: isNavigationRail ? 88 : undefined,
@@ -120,11 +115,11 @@ const StreamingTabBar = ({
                   backgroundColor: focused
                     ? colors.secondaryContainer
                     : 'transparent',
-                  borderRadius: 16,
-                  height: 32,
+                  borderRadius: 18,
+                  height: 36,
                   justifyContent: 'center',
                   overflow: 'hidden',
-                  width: 56,
+                  width: 64,
                 }}>
                 <AnimatedTabIcon
                   name={icon}
@@ -134,7 +129,7 @@ const StreamingTabBar = ({
                       ? colors.onSecondaryContainer
                       : colors.onSurfaceVariant
                   }
-                  size={24}
+                  size={26}
                 />
               </View>
               {showLabels ? (
@@ -143,7 +138,7 @@ const StreamingTabBar = ({
                   numberOfLines={1}
                   style={{
                     color: focused ? colors.onSurface : colors.onSurfaceVariant,
-                    marginTop: 4,
+                    marginTop: 6,
                     textAlign: 'center',
                   }}>
                   {label}

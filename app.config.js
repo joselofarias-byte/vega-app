@@ -28,12 +28,6 @@ module.exports = () => {
       },
     ],
     [
-      'react-native-google-cast',
-      {
-        expandedController: true,
-      },
-    ],
-    [
       'react-native-edge-to-edge',
       {
         android: {
