@@ -1,14 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-
-const androidGoogleServicesFile = './google-services.json';
-const iosGoogleServicesFile = './GoogleService-Info.plist';
-const hasAndroidGoogleServices = fs.existsSync(
-  path.resolve(__dirname, androidGoogleServicesFile),
-);
-const hasIosGooglePlist = fs.existsSync(
-  path.resolve(__dirname, iosGoogleServicesFile),
-);
 const tmdbApiKey =
   process.env.TMDB_API_KEY || process.env.EXPO_PUBLIC_TMDB_API_KEY || '';
 
@@ -24,12 +13,6 @@ module.exports = () => {
     './plugins/with-android-release-gradle.js',
     './plugins/with-android-signing.js',
     './plugins/with-android-okhttp.js',
-    ...(hasAndroidGoogleServices || hasIosGooglePlist
-      ? ['@react-native-firebase/app']
-      : []),
-    ...(hasAndroidGoogleServices || hasIosGooglePlist
-      ? ['@react-native-firebase/crashlytics']
-      : []),
     ['expo-build-properties', {android: {usePrecompiledHeaders: true}}],
     [
       'react-native-video',
@@ -128,9 +111,6 @@ module.exports = () => {
         reactCompiler: true,
       },
       android: {
-        ...(hasAndroidGoogleServices
-          ? {googleServicesFile: androidGoogleServicesFile}
-          : {}),
         minSdkVersion: 28,
         package: PACKAGE_NAME,
         versionCode: 184,
@@ -166,14 +146,9 @@ module.exports = () => {
         launchMode: 'singleTask',
         supportsPictureInPicture: true,
       },
-      ios: {
-        ...(hasIosGooglePlist
-          ? {googleServicesFile: iosGoogleServicesFile}
-          : {}),
-      },
+      ios: {},
       platforms: ['ios', 'android'],
       extra: {
-        hasFirebase: hasAndroidGoogleServices || hasIosGooglePlist,
         isPlayStore: IS_PLAYSTORE,
         tmdbApiKey,
       },

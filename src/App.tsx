@@ -62,11 +62,6 @@ import {
 } from './lib/sync/syncService';
 import StreamingTabBar from './components/navigation/StreamingTabBar';
 import AppDialogHost from './components/AppDialogHost';
-import {
-  getAnalytics,
-  getCrashlytics,
-  isFirebaseNativeReady,
-} from './lib/utils/firebaseSafe';
 
 enableScreens(true);
 enableFreeze(true);
@@ -187,9 +182,6 @@ const App = () => {
   const WatchListStack = createNativeStackNavigator<WatchListStackParamList>();
   const DownloadsStack = createNativeStackNavigator<DownloadsStackParamList>();
   const SettingsStack = createNativeStackNavigator<SettingsStackParamList>();
-  const hasFirebase =
-    Boolean(Constants?.expoConfig?.extra?.hasFirebase) &&
-    isFirebaseNativeReady();
 
   // const showTabBarLables = settingsStorage.showTabBarLabels();
 
@@ -255,47 +247,6 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    // Apply telemetry preference before using analytics
-    const optIn = settingsStorage.isTelemetryOptIn();
-    if (hasFirebase) {
-      try {
-        const crashlytics = getCrashlytics();
-        crashlytics && crashlytics().setCrashlyticsCollectionEnabled(optIn);
-      } catch {}
-      try {
-        const analytics = getAnalytics();
-        analytics && analytics().setAnalyticsCollectionEnabled(optIn);
-      } catch {}
-      try {
-        const analytics = getAnalytics();
-        analytics &&
-          analytics().setConsent({
-            analytics_storage: optIn,
-            ad_storage: optIn,
-            ad_user_data: optIn,
-            ad_personalization: optIn,
-          });
-      } catch {}
-
-      // Mark app open
-      try {
-        const analytics = getAnalytics();
-        analytics && analytics().logAppOpen();
-      } catch {}
-      // Example user property: theme
-      try {
-        const analytics = getAnalytics();
-        analytics &&
-          analytics().setUserProperty('theme_preference', 'fixed-neutral');
-      } catch {}
-
-      // Initial Crashlytics log
-      try {
-        const crashlytics = getCrashlytics();
-        crashlytics && crashlytics().log('App mounted');
-      } catch {}
-    }
-
     const unsubscribe = notifee.onForegroundEvent(({type, detail}) => {
       notificationService.actionHandler({type, detail});
     });
@@ -582,35 +533,6 @@ const App = () => {
                   }
                   // Hide bootsplash
                   await BootSplash.hide({fade: true});
-                  // Track initial screen
-                  if (hasFirebase) {
-                    try {
-                      const route = navigationRef.getCurrentRoute();
-                      if (route?.name) {
-                        const analytics = getAnalytics();
-                        analytics &&
-                          (await analytics().logScreenView({
-                            screen_name: route.name,
-                            screen_class: 'Navigation',
-                          }));
-                      }
-                    } catch {}
-                  }
-                }}
-                onStateChange={async () => {
-                  if (hasFirebase) {
-                    try {
-                      const route = navigationRef.getCurrentRoute();
-                      if (route?.name) {
-                        const analytics = getAnalytics();
-                        analytics &&
-                          (await analytics().logScreenView({
-                            screen_name: route.name,
-                            screen_class: 'Navigation',
-                          }));
-                      }
-                    } catch {}
-                  }
                 }}
                 theme={{
                   fonts: {

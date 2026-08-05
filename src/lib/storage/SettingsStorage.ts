@@ -48,8 +48,6 @@ export enum SettingsKeys {
 
   LIST_VIEW_TYPE = 'viewType',
 
-  // Telemetry (privacy)
-  TELEMETRY_OPT_IN = 'telemetryOptIn',
 
   // Metadata services
   TMDB_API_KEY = 'tmdbApiKey',
@@ -299,14 +297,6 @@ export class SettingsStorage {
     mainStorage.setString(SettingsKeys.LIST_VIEW_TYPE, type.toString());
   }
 
-  // Telemetry / Privacy
-  isTelemetryOptIn(): boolean {
-    return mainStorage.getBool(SettingsKeys.TELEMETRY_OPT_IN, true);
-  }
-
-  setTelemetryOptIn(enabled: boolean): void {
-    mainStorage.setBool(SettingsKeys.TELEMETRY_OPT_IN, enabled);
-  }
 
   getTmdbApiKey(): string {
     return mainStorage.getString(SettingsKeys.TMDB_API_KEY)?.trim() || '';
