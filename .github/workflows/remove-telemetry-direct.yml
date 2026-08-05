@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18.x'
+          node-version: '20.19.4'
           cache: npm
 
       - name: Remove telemetry source, configuration and dependencies
@@ -46,9 +46,17 @@ jobs:
               target.write_bytes(updated.replace('\n', newline).encode('utf-8'))
 
           def remove_exact(text: str, pattern: str, replacement: str = '', count: int = 1) -> str:
-              updated, matches = re.subn(pattern, replacement, text, count=count, flags=re.MULTILINE | re.DOTALL)
+              updated, matches = re.subn(
+                  pattern,
+                  replacement,
+                  text,
+                  count=count,
+                  flags=re.MULTILINE | re.DOTALL,
+              )
               if matches != count:
-                  raise SystemExit(f'Patrón esperado {count} vez/veces; encontrado {matches}: {pattern[:100]}')
+                  raise SystemExit(
+                      f'Patrón esperado {count} vez/veces; encontrado {matches}: {pattern[:100]}'
+                  )
               return updated
 
           def edit_app_config(text: str) -> str:
@@ -97,10 +105,6 @@ jobs:
           def edit_app(text: str) -> str:
               text = remove_exact(
                   text,
-                  r"import Constants from 'expo-constants';\n",
-              )
-              text = remove_exact(
-                  text,
                   r"import \{\n"
                   r"  getAnalytics,\n"
                   r"  getCrashlytics,\n"
@@ -120,6 +124,19 @@ jobs:
                   r"    if \(hasFirebase\) \{.*?"
                   r"    \}\n\n"
                   r"(?=    const unsubscribe = notifee\.onForegroundEvent)",
+              )
+              text = remove_exact(
+                  text,
+                  r"                  // Track initial screen\n"
+                  r"                  if \(hasFirebase\) \{.*?"
+                  r"                  \}\n",
+              )
+              text = remove_exact(
+                  text,
+                  r"                onStateChange=\{async \(\) => \{\n"
+                  r"                  if \(hasFirebase\) \{.*?"
+                  r"                  \}\n"
+                  r"                \}\}\n",
               )
               return text
 
