@@ -1,0 +1,208 @@
+name: Remove Cast telemetry and build APK
+
+on:
+  push:
+    branches:
+      - remove-telemetry-v2
+
+permissions:
+  contents: write
+
+jobs:
+  strip-and-build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CI: '1'
+      GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx6g -Dfile.encoding=UTF-8
+      MYAPP_UPLOAD_STORE_PASSWORD: telemetryfree
+      MYAPP_UPLOAD_KEY_ALIAS: vega-telemetry-free
+      MYAPP_UPLOAD_KEY_PASSWORD: telemetryfree
+
+    steps:
+      - name: Check out full history
+        uses: actions/checkout@v4
+        with:
+          ref: remove-telemetry-v2
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.19.4
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+
+      - name: Remove Google Cast SDK and integration
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          npm uninstall react-native-google-cast --legacy-peer-deps
+
+          git show 86903b3ac624763db41ab38e693794d264672ae8^:src/screens/home/Player.tsx \
+            > src/screens/home/Player.tsx
+          git show 86903b3ac624763db41ab38e693794d264672ae8^:src/components/navigation/StreamingTabBar.tsx \
+            > src/components/navigation/StreamingTabBar.tsx
+
+          rm -f src/components/CastRemotePlayer.tsx
+
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('app.config.js')
+          raw = path.read_bytes()
+          block = (
+              "    [\n"
+              "      'react-native-google-cast',\n"
+              "      {\n"
+              "        expandedController: true,\n"
+              "      },\n"
+              "    ],\n"
+          ).encode()
+          candidates = (block, block.replace(b'\n', b'\r\n'))
+          matches = [(candidate, raw.count(candidate)) for candidate in candidates]
+          found = [(candidate, count) for candidate, count in matches if count]
+          if len(found) != 1 or found[0][1] != 1:
+              raise SystemExit(f'Bloque Cast inesperado en app.config.js: {matches}')
+          path.write_bytes(raw.replace(found[0][0], b'', 1))
+          PY
+
+          rm -f .github/workflows/strip-cast-and-build.yml
+
+      - name: Verify source and dependency removal
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          forbidden='react-native-google-cast|com\.google\.android\.gms\.cast|play-services-cast|@react-native-firebase|firebaseSafe|FirebaseAnalytics|FirebaseCrashlytics|Crashlytics|crashlytics|TELEMETRY_OPT_IN|telemetryOptIn|isTelemetryOptIn|setTelemetryOptIn|analytics_storage|ad_storage|ad_user_data|ad_personalization|io\.sentry|appcenter|bugsnag|mixpanel|posthog'
+          targets=(src app.config.js package.json package-lock.json)
+          residual="$(grep -RInE "$forbidden" "${targets[@]}" --exclude-dir=node_modules --exclude-dir=build 2>/dev/null || true)"
+          if [[ -n "$residual" ]]; then
+            printf '%s\n' "$residual" >&2
+            exit 1
+          fi
+
+          if npm ls react-native-google-cast --all >/dev/null 2>&1; then
+            printf 'react-native-google-cast continúa en el árbol npm.\n' >&2
+            exit 1
+          fi
+
+          node -e "JSON.parse(require('fs').readFileSync('package.json')); JSON.parse(require('fs').readFileSync('package-lock.json'));"
+          git -c core.whitespace=cr-at-eol diff --check
+
+      - name: Commit telemetry-free Cast removal
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git -c core.whitespace=cr-at-eol diff --cached --check
+          git commit -m 'privacy: remove unavoidable Google Cast telemetry'
+          git push origin HEAD:remove-telemetry-v2
+
+      - name: Generate Android project
+        run: |
+          npm run build:sandbox
+          npx expo prebuild --platform android --clean
+
+      - name: Verify Android release dependency graph
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          cd android
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:dependencies --configuration releaseRuntimeClasspath \
+            > "$RUNNER_TEMP/release-dependencies.txt"
+          if grep -Ei 'play-services-cast|firebase-analytics|firebase-crashlytics|firebase-perf|firebase-encoders|sentry|appcenter|bugsnag|mixpanel|posthog' \
+            "$RUNNER_TEMP/release-dependencies.txt"; then
+            printf 'El grafo Android conserva una dependencia de telemetría.\n' >&2
+            exit 1
+          fi
+
+      - name: Generate temporary release signing key
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          keytool -genkeypair \
+            -keystore "$RUNNER_TEMP/vega-telemetry-free.keystore" \
+            -storepass "$MYAPP_UPLOAD_STORE_PASSWORD" \
+            -alias "$MYAPP_UPLOAD_KEY_ALIAS" \
+            -keypass "$MYAPP_UPLOAD_KEY_PASSWORD" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname 'CN=Vega Telemetry Free, O=Local Build, C=UY'
+          printf 'MYAPP_UPLOAD_STORE_FILE=%s\n' "$RUNNER_TEMP/vega-telemetry-free.keystore" >>"$GITHUB_ENV"
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew --no-daemon --stacktrace assembleRelease
+
+      - name: Collect and inspect APK
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p dist "$RUNNER_TEMP/dex"
+
+          source_apk="$(find android/app/build/outputs/apk/release -type f -name '*universal*.apk' | sort | head -n 1)"
+          if [[ -z "$source_apk" ]]; then
+            source_apk="$(find android/app/build/outputs/apk/release -type f -name '*arm64-v8a*.apk' | sort | head -n 1)"
+          fi
+          if [[ -z "$source_apk" ]]; then
+            source_apk="$(find android/app/build/outputs/apk/release -type f -name '*.apk' | sort | head -n 1)"
+          fi
+          [[ -n "$source_apk" ]] || {
+            printf 'No se encontró un APK release.\n' >&2
+            exit 1
+          }
+
+          target_apk='dist/Vega-4.0.3-sin-telemetria-release.apk'
+          cp "$source_apk" "$target_apk"
+
+          entries="$(unzip -Z1 "$target_apk")"
+          if grep -Ei 'play-services-cast|firebase-analytics|firebase-crashlytics|firebase-perf|firebase-encoders|sentry|appcenter|bugsnag|mixpanel|posthog' <<<"$entries"; then
+            printf 'El APK conserva archivos de telemetría.\n' >&2
+            exit 1
+          fi
+
+          unzip -q "$target_apk" 'classes*.dex' -d "$RUNNER_TEMP/dex"
+          dex_hits="$(find "$RUNNER_TEMP/dex" -name 'classes*.dex' -print0 \
+            | xargs -0 strings -a \
+            | grep -Ei 'com[./]google[./]android[./]gms[./]cast|com[./]google[./]firebase[./](analytics|crashlytics|perf)|io[./]sentry|com[./]microsoft[./]appcenter|com[./]bugsnag|com[./]mixpanel|com[./]posthog' \
+            || true)"
+          if [[ -n "$dex_hits" ]]; then
+            printf '%s\n' "$dex_hits" >&2
+            printf 'El DEX conserva clases de telemetría.\n' >&2
+            exit 1
+          fi
+
+          zipalign_bin="$(find "$ANDROID_HOME/build-tools" -type f -name zipalign | sort -V | tail -n 1)"
+          apksigner_bin="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          "$zipalign_bin" -c -P 16 -v 4 "$target_apk"
+          "$apksigner_bin" verify --verbose --print-certs "$target_apk" \
+            | tee dist/apksigner-verification.txt
+          sha256sum "$target_apk" | tee dist/SHA256SUMS.txt
+          unzip -Z1 "$target_apk" | sed -n 's#^lib/\([^/]*\)/.*#\1#p' | sort -u \
+            | tee dist/ABIS.txt
+          ls -lh dist
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Vega-4.0.3-sin-telemetria-release
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
