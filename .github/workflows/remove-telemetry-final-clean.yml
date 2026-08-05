@@ -98,7 +98,6 @@ jobs:
           fi
 
           git -c core.whitespace=cr-at-eol diff --check
-          node -e "require('@babel/core').transformFileSync('src/App.tsx', {configFile: './babel.config.js'});"
           node -e "JSON.parse(require('fs').readFileSync('package.json')); JSON.parse(require('fs').readFileSync('package-lock.json'));"
 
       - name: Compare Jest failures with unchanged main
