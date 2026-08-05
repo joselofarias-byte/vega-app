@@ -13,20 +13,21 @@ describe('language preferences', () => {
     expect(normalizeLanguageTag('English')).toBe('en');
   });
 
-  test('reads explicit subtitle metadata before text inference', () => {
+  test('explicit metadata takes precedence over text inference', () => {
     expect(
       getCandidateLanguages({
-        audioLanguages: ['en'],
+        title: 'Spanish edition',
+        audioLanguages: ['hi'],
         subtitles: [{language: 'es-419', title: 'Español latino'}],
       }),
     ).toMatchObject({
-      audio: ['en'],
+      audio: ['hi'],
       subtitles: ['es-419'],
       hasMetadata: true,
     });
   });
 
-  test('strict Spanish profile ranks Latin Spanish before English with Spanish subtitles', () => {
+  test('Spanish profile ranks Latin Spanish before English with Spanish subtitles', () => {
     const latin = {
       server: 'Latino',
       audioLanguages: ['es-419'],
@@ -47,12 +48,15 @@ describe('language preferences', () => {
   });
 
   test('strict mode hides incompatible and unknown streams', () => {
+    const strict = {
+      ...DEFAULT_LANGUAGE_PROFILE,
+      mode: 'strict' as const,
+      allowUnknown: false,
+    };
     const hindi = {server: 'Hindi', audioLanguages: ['hi']};
     const unknown = {server: 'Server 1'};
 
-    expect(
-      filterAndRankByLanguage([hindi, unknown], DEFAULT_LANGUAGE_PROFILE),
-    ).toEqual([]);
+    expect(filterAndRankByLanguage([hindi, unknown], strict)).toEqual([]);
   });
 
   test('balanced mode uses unknown streams only when no compatible stream exists', () => {
