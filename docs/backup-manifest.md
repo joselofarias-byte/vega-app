@@ -1,10 +1,20 @@
 # Manifiesto de respaldo — inteligencia de código
 
+## Automatización
+
+Los agentes no deben construir este respaldo manualmente. Al iniciar una tarea:
+
+```bash
+bash tools/llm-workflow.sh start --agent <llm> --objective "<objetivo>"
+```
+
+se crea una orden privada fuera del checkout con respaldo recuperable, evidencia de CodeGraph y `MANIFEST.sha256`. Los permisos se crean con `umask 077`.
+
 ## Principio
 
-El índice de CodeGraph se deriva del código y se puede reconstruir. El respaldo recuperable debe priorizar Git, parches, archivos untracked relevantes y evidencia textual.
+El índice de CodeGraph se deriva del código y se puede reconstruir. El respaldo recuperable prioriza Git, parches, archivos untracked relevantes y evidencia textual.
 
-## Contenido obligatorio del respaldo Git
+## Contenido generado automáticamente
 
 - estado del repositorio;
 - diff unstaged binario;
@@ -12,35 +22,33 @@ El índice de CodeGraph se deriva del código y se puede reconstruir. El respald
 - ramas y upstreams;
 - worktrees;
 - historial reciente;
-- bundle Git completo;
-- inventario de untracked;
-- manifiesto SHA-256.
+- bundle Git completo y verificado;
+- inventario y archivo `tar.gz` de untracked no ignorados;
+- rama, commit, origin y fecha;
+- versión y estado de CodeGraph;
+- ruta del vault;
+- manifiesto SHA-256 de toda la orden.
 
-## Evidencia adicional recomendada
+## Checkpoints y cierre
 
-Guardar un archivo `code-intelligence.txt` con una captura equivalente a:
+`checkpoint` vuelve a capturar Git y CodeGraph. El hook `pre-commit` lo ejecuta automáticamente antes de todo commit autorizado.
 
 ```bash
-{
-  date -Iseconds
-  printf 'repository=%s\n' "$(git rev-parse --show-toplevel)"
-  printf 'branch=%s\n' "$(git branch --show-current)"
-  printf 'commit=%s\n' "$(git rev-parse HEAD)"
-  printf 'codegraph_version='; codegraph --version || true
-  codegraph status "$(git rev-parse --show-toplevel)" || true
-  printf 'vault=%s\n' '/storage/emulated/0/Documents/Engineering-KB/Projects/Vega'
-} > code-intelligence.txt
+bash tools/llm-workflow.sh checkpoint "antes del cambio crítico"
+bash tools/llm-workflow.sh finish "resultado final"
 ```
 
-## Exclusiones recomendadas
+`finish` captura el estado final, sincroniza CodeGraph, exporta el estado disponible a Obsidian y cierra la orden.
 
-Excluir de TBM y de otros respaldos de archivos:
+## Exclusiones
+
+No considerar datos esenciales:
 
 ```text
 .codegraph/
 ```
 
-También excluir bases SQLite, archivos `-wal`, `-shm` y cachés generadas. Estas exclusiones no afectan la recuperación porque el índice se regenera mediante:
+También quedan fuera como fuentes de verdad las bases SQLite, archivos `-wal`, `-shm` y cachés. Se reconstruyen mediante:
 
 ```bash
 bash tools/knowledge-graph.sh index
@@ -49,13 +57,13 @@ bash tools/knowledge-graph.sh obsidian
 
 ## Restauración
 
-1. restaurar o clonar el repositorio desde bundle/remoto;
-2. aplicar staged y unstaged patches;
-3. restaurar untracked relevantes;
-4. verificar rama y commit;
-5. validar el entorno de Debian;
+1. restaurar o clonar desde `backup/repository.bundle` o el remoto;
+2. aplicar `staged.patch` y `unstaged.patch`;
+3. restaurar `untracked.tar.gz` cuando exista;
+4. verificar rama y commit con `repository-metadata.txt`;
+5. validar `MANIFEST.sha256`;
 6. reconstruir CodeGraph sólo cuando vuelva a ser necesario.
 
 ## Regla
 
-No considerar `.codegraph/` como fuente de verdad. La fuente de verdad es el repositorio Git y la evidencia de la orden de trabajo.
+La fuente de verdad es Git más la evidencia de la orden. `.codegraph/` y Obsidian no sustituyen al bundle, los parches ni los untracked recuperables.
