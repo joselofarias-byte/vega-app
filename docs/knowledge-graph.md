@@ -2,6 +2,19 @@
 
 Este repositorio usa **CodeGraph** como índice local de símbolos, llamadas, dependencias e impacto de cambios para agentes de programación. La base SQLite generada queda fuera de Git.
 
+## Flujo automático estándar
+
+Toda tarea realizada por un LLM debe seguir [`AI_WORKFLOW.md`](../AI_WORKFLOW.md). No se copian plantillas manualmente: `tools/llm-workflow.sh` crea la orden, el respaldo y la evidencia.
+
+```bash
+bash tools/llm-workflow.sh start --agent <llm> --objective "<objetivo>"
+bash tools/llm-workflow.sh note "<hallazgo>"
+bash tools/llm-workflow.sh run -- <prueba-o-build>
+bash tools/llm-workflow.sh finish "<resultado>"
+```
+
+Usar `--structural` en `start` para cambios de arquitectura, puentes TypeScript/Android, reproducción, navegación, dependencias o flujos centrales. Un commit autorizado queda bloqueado si no existe una orden activa y recibe automáticamente trailers que identifican la orden y el agente.
+
 ## Uso recomendado
 
 Usar CodeGraph antes de modificar:
@@ -28,7 +41,7 @@ Usá CodeGraph para identificar callers, callees y archivos afectados si elimina
 Localizá con CodeGraph los puentes entre TypeScript y los módulos Android, y después verificá sólo los archivos relevantes.
 ```
 
-CodeGraph orienta la investigación; no reemplaza la lectura del diff, las pruebas ni la compilación.
+CodeGraph orienta la investigación; no reemplaza la lectura del diff, las pruebas, el typecheck, el lint ni la compilación.
 
 ## Obsidian
 
@@ -44,44 +57,33 @@ Obsidian no sustituye Git, los bundles ni los parches de recuperación.
 
 ## Integración con órdenes de trabajo
 
-Toda orden de trabajo que use CodeGraph debe registrar:
+La orden automática registra:
 
 1. repositorio, rama y commit base;
-2. objetivo concreto;
-3. símbolos, rutas o dependencias consultadas;
-4. callers, callees e impacto relevante;
-5. archivos previstos para modificar;
-6. pruebas, compilación y criterios de aceptación;
-7. resultado final y commit, o constancia de que no hubo commit/push.
+2. objetivo y agente responsable;
+3. estado de CodeGraph;
+4. notas de símbolos, rutas, dependencias, puentes e impacto;
+5. pruebas y compilaciones con salida y código de retorno;
+6. checkpoints previos a commits;
+7. resultado final, commit alcanzado y estado del árbol.
 
-Plantilla: [`work-order-template.md`](work-order-template.md).
+La plantilla [`work-order-template.md`](work-order-template.md) queda como referencia humana.
 
 ## Integración con respaldos
 
-El respaldo recuperable continúa basándose en Git:
+`start` genera automáticamente:
 
 - `status.txt`;
-- `unstaged.patch`;
-- `staged.patch`;
-- `branches.txt`;
-- `worktrees.txt`;
-- `log.txt`;
-- bundle Git completo;
-- inventario de archivos untracked cuando corresponda;
-- manifiesto SHA-256.
+- `unstaged.patch` y `staged.patch` binarios;
+- ramas, worktrees e historial;
+- bundle Git completo y verificado;
+- archivo recuperable de untracked;
+- versión y estado de CodeGraph;
+- manifiesto SHA-256 integral.
 
-Agregar como evidencia liviana:
+No se respaldan como fuentes de verdad `.codegraph/`, SQLite, WAL ni cachés. Son regenerables. Guía: [`backup-manifest.md`](backup-manifest.md).
 
-- versión de CodeGraph;
-- salida de `codegraph status`;
-- commit y rama usados para generar el índice;
-- ruta del vault donde quedó el estado exportado.
-
-No respaldar `.codegraph/`, bases SQLite, archivos WAL ni cachés como datos esenciales. Son regenerables.
-
-Guía: [`backup-manifest.md`](backup-manifest.md).
-
-## Comandos
+## Comandos directos de índices
 
 ```bash
 bash tools/knowledge-graph.sh install
@@ -90,11 +92,11 @@ bash tools/knowledge-graph.sh status
 bash tools/knowledge-graph.sh obsidian
 ```
 
-Para actualizar después de cambios relevantes:
+Para actualizar manualmente:
 
 ```bash
 bash tools/knowledge-graph.sh sync
 bash tools/knowledge-graph.sh obsidian
 ```
 
-El checkout debe estar en el sistema de archivos nativo de Debian. No crear el índice SQLite en `/sdcard` ni `/storage/emulated`.
+Normalmente el cierre de `llm-workflow.sh` hace la actualización correspondiente. El checkout debe estar en el sistema de archivos nativo de Debian. No crear el índice SQLite en `/sdcard` ni `/storage/emulated`.
