@@ -5,9 +5,9 @@ export interface LanguageProfile {
   name: string;
   preferredAudio: string[];
   preferredSubtitles: string[];
+  subtitleFallbackAudio: string[];
   mode: LanguageFilterMode;
   allowOriginalAudio: boolean;
-  allowAudioWithPreferredSubtitles: boolean;
   allowUnknown: boolean;
 }
 
@@ -26,6 +26,11 @@ export interface LanguageCandidate {
     type?: string;
   }>;
 }
+
+export type LanguageCompatibility =
+  | 'compatible'
+  | 'unknown'
+  | 'incompatible';
 
 export const COMMON_LANGUAGE_OPTIONS = [
   {tag: 'es-419', label: 'Español latino'},
@@ -52,9 +57,9 @@ export const LANGUAGE_PRESETS: LanguageProfile[] = [
     name: 'Español latino',
     preferredAudio: ['es-419', 'es', 'es-ES'],
     preferredSubtitles: ['es-419', 'es', 'es-ES'],
+    subtitleFallbackAudio: ['en'],
     mode: 'balanced',
     allowOriginalAudio: false,
-    allowAudioWithPreferredSubtitles: true,
     allowUnknown: true,
   },
   {
@@ -62,9 +67,9 @@ export const LANGUAGE_PRESETS: LanguageProfile[] = [
     name: 'Español de España',
     preferredAudio: ['es-ES', 'es', 'es-419'],
     preferredSubtitles: ['es-ES', 'es', 'es-419'],
+    subtitleFallbackAudio: ['en'],
     mode: 'balanced',
     allowOriginalAudio: false,
-    allowAudioWithPreferredSubtitles: true,
     allowUnknown: true,
   },
   {
@@ -72,9 +77,9 @@ export const LANGUAGE_PRESETS: LanguageProfile[] = [
     name: 'English',
     preferredAudio: ['en'],
     preferredSubtitles: ['en'],
+    subtitleFallbackAudio: [],
     mode: 'balanced',
     allowOriginalAudio: true,
-    allowAudioWithPreferredSubtitles: true,
     allowUnknown: true,
   },
   {
@@ -82,9 +87,9 @@ export const LANGUAGE_PRESETS: LanguageProfile[] = [
     name: 'Português do Brasil',
     preferredAudio: ['pt-BR', 'pt'],
     preferredSubtitles: ['pt-BR', 'pt'],
+    subtitleFallbackAudio: ['en'],
     mode: 'balanced',
     allowOriginalAudio: false,
-    allowAudioWithPreferredSubtitles: true,
     allowUnknown: true,
   },
   {
@@ -92,9 +97,9 @@ export const LANGUAGE_PRESETS: LanguageProfile[] = [
     name: 'Audio original',
     preferredAudio: [],
     preferredSubtitles: ['es-419', 'es', 'es-ES', 'en'],
+    subtitleFallbackAudio: [],
     mode: 'balanced',
     allowOriginalAudio: true,
-    allowAudioWithPreferredSubtitles: true,
     allowUnknown: true,
   },
 ];
@@ -177,42 +182,72 @@ const languageMatches = (actual: string, preferred: string): boolean => {
 const includesPreferred = (actual: string[], preferred: string[]): boolean =>
   preferred.some(wanted => actual.some(value => languageMatches(value, wanted)));
 
+const joinText = (values: Array<string | undefined>): string =>
+  values.filter(Boolean).join(' ').toLowerCase();
+
 const inferFromText = (candidate: LanguageCandidate) => {
-  const text = [
+  // Subtitle track titles are intentionally excluded from audio inference.
+  // Otherwise a track named "Español latino" could be mistaken for the
+  // stream's audio language.
+  const audioText = joinText([
+    candidate.server,
+    candidate.title,
+    candidate.description,
+  ]);
+  const subtitleText = joinText([
     candidate.server,
     candidate.title,
     candidate.description,
     ...(candidate.subtitles?.map(track => track.title) || []),
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
+  ]);
 
   const audio: string[] = [];
   const subtitles: string[] = [];
 
-  if (/\b(latino|latam|es[- ]?419|audio lat)\b/i.test(text)) audio.push('es-419');
-  if (/\b(castellano|es[- ]?es|spanish spain)\b/i.test(text)) audio.push('es-ES');
-  if (/\b(español|espanol|spanish|dual esp)\b/i.test(text)) audio.push('es');
-  if (/\b(english|inglés|ingles|audio en)\b/i.test(text)) audio.push('en');
-  if (/\b(portugu[eê]s|pt[- ]?br|brasil)\b/i.test(text)) audio.push('pt-BR');
-  if (/\b(français|francais|french)\b/i.test(text)) audio.push('fr');
-  if (/\b(deutsch|german)\b/i.test(text)) audio.push('de');
-  if (/\b(italiano|italian)\b/i.test(text)) audio.push('it');
-  if (/\b(japanese|japon[eé]s)\b/i.test(text)) audio.push('ja');
-  if (/\b(korean|coreano)\b/i.test(text)) audio.push('ko');
-  if (/\b(chinese|mandarin|chino)\b/i.test(text)) audio.push('zh');
-  if (/\b(hindi)\b/i.test(text)) audio.push('hi');
-  if (/\b(arabic|árabe|arabe)\b/i.test(text)) audio.push('ar');
-  if (/\b(russian|ruso)\b/i.test(text)) audio.push('ru');
-  if (/\b(turkish|turco)\b/i.test(text)) audio.push('tr');
-  if (/\b(polish|polaco)\b/i.test(text)) audio.push('pl');
-
-  if (/\b(sub(?:title|titulado)?s?[- ]?(?:es|esp|latino)|sub español|sub esp)\b/i.test(text)) {
-    subtitles.push(/\b(latino|latam|es[- ]?419)\b/i.test(text) ? 'es-419' : 'es');
+  if (/\b(latino|latam|es[- ]?419|audio lat)\b/i.test(audioText)) {
+    audio.push('es-419');
   }
-  if (/\b(english subs?|sub(?:title)?s? en)\b/i.test(text)) subtitles.push('en');
-  if (/\b(portugu[eê]s subs?|legendas? pt)\b/i.test(text)) subtitles.push('pt-BR');
+  if (/\b(castellano|es[- ]?es|spanish spain)\b/i.test(audioText)) {
+    audio.push('es-ES');
+  }
+  if (/\b(español|espanol|spanish|dual esp)\b/i.test(audioText)) {
+    audio.push('es');
+  }
+  if (/\b(english|inglés|ingles|audio en)\b/i.test(audioText)) {
+    audio.push('en');
+  }
+  if (/\b(portugu[eê]s|pt[- ]?br|brasil)\b/i.test(audioText)) {
+    audio.push('pt-BR');
+  }
+  if (/\b(français|francais|french)\b/i.test(audioText)) audio.push('fr');
+  if (/\b(deutsch|german)\b/i.test(audioText)) audio.push('de');
+  if (/\b(italiano|italian)\b/i.test(audioText)) audio.push('it');
+  if (/\b(japanese|japon[eé]s)\b/i.test(audioText)) audio.push('ja');
+  if (/\b(korean|coreano)\b/i.test(audioText)) audio.push('ko');
+  if (/\b(chinese|mandarin|chino)\b/i.test(audioText)) audio.push('zh');
+  if (/\b(hindi)\b/i.test(audioText)) audio.push('hi');
+  if (/\b(arabic|árabe|arabe)\b/i.test(audioText)) audio.push('ar');
+  if (/\b(russian|ruso)\b/i.test(audioText)) audio.push('ru');
+  if (/\b(turkish|turco)\b/i.test(audioText)) audio.push('tr');
+  if (/\b(polish|polaco)\b/i.test(audioText)) audio.push('pl');
+
+  if (
+    /\b(sub(?:title|titulado)?s?[- ]?(?:es|esp|latino)|sub español|sub esp)\b/i.test(
+      subtitleText,
+    )
+  ) {
+    subtitles.push(
+      /\b(latino|latam|es[- ]?419)\b/i.test(subtitleText)
+        ? 'es-419'
+        : 'es',
+    );
+  }
+  if (/\b(english subs?|sub(?:title)?s? en)\b/i.test(subtitleText)) {
+    subtitles.push('en');
+  }
+  if (/\b(portugu[eê]s subs?|legendas? pt)\b/i.test(subtitleText)) {
+    subtitles.push('pt-BR');
+  }
 
   return {audio: uniqueTags(audio), subtitles: uniqueTags(subtitles)};
 };
@@ -233,50 +268,85 @@ export const getCandidateLanguages = (candidate: LanguageCandidate) => {
     audio,
     subtitles,
     originalLanguage,
-    hasMetadata:
-      audio.length > 0 ||
-      subtitles.length > 0 ||
-      originalLanguage !== 'und',
+    audioKnown: audio.length > 0 || originalLanguage !== 'und',
+    subtitleKnown: subtitles.length > 0,
   };
+};
+
+const getPreferredAudioScore = (
+  actualAudio: string[],
+  preferredAudio: string[],
+): number => {
+  let score = 0;
+  preferredAudio.forEach((preferred, index) => {
+    if (actualAudio.some(actual => languageMatches(actual, preferred))) {
+      score = Math.max(score, 1000 - index * 100);
+    }
+  });
+  return score;
+};
+
+export const evaluateLanguageCandidate = (
+  candidate: LanguageCandidate,
+  profile: LanguageProfile,
+): {compatibility: LanguageCompatibility; score: number} => {
+  const languages = getCandidateLanguages(candidate);
+  let score = getPreferredAudioScore(
+    languages.audio,
+    profile.preferredAudio,
+  );
+
+  if (
+    profile.allowOriginalAudio &&
+    languages.originalLanguage !== 'und' &&
+    (languages.audio.length === 0 ||
+      languages.audio.some(audio =>
+        languageMatches(audio, languages.originalLanguage),
+      ))
+  ) {
+    score = Math.max(score, 750);
+  }
+
+  const hasPreferredSubtitles = includesPreferred(
+    languages.subtitles,
+    profile.preferredSubtitles,
+  );
+  const hasAllowedFallbackAudio = includesPreferred(
+    languages.audio,
+    profile.subtitleFallbackAudio,
+  );
+
+  if (hasPreferredSubtitles && hasAllowedFallbackAudio) {
+    score = Math.max(score, 600);
+  }
+
+  if (score > 0) {
+    profile.preferredSubtitles.forEach((preferred, index) => {
+      if (
+        languages.subtitles.some(actual => languageMatches(actual, preferred))
+      ) {
+        score += Math.max(1, 50 - index * 5);
+      }
+    });
+    return {compatibility: 'compatible', score: score + 10};
+  }
+
+  if (!languages.audioKnown) {
+    return {compatibility: 'unknown', score: 0};
+  }
+
+  return {compatibility: 'incompatible', score: 0};
 };
 
 export const getLanguageCompatibilityScore = (
   candidate: LanguageCandidate,
   profile: LanguageProfile,
-): number => {
-  const languages = getCandidateLanguages(candidate);
-  let score = 0;
+): number => evaluateLanguageCandidate(candidate, profile).score;
 
-  profile.preferredAudio.forEach((preferred, index) => {
-    if (languages.audio.some(actual => languageMatches(actual, preferred))) {
-      score = Math.max(score, 1000 - index * 100);
-    }
-  });
-
-  if (
-    profile.allowOriginalAudio &&
-    languages.originalLanguage !== 'und' &&
-    (languages.audio.includes(languages.originalLanguage) ||
-      languages.audio.length === 0)
-  ) {
-    score = Math.max(score, 750);
-  }
-
-  if (
-    profile.allowAudioWithPreferredSubtitles &&
-    includesPreferred(languages.subtitles, profile.preferredSubtitles)
-  ) {
-    score = Math.max(score, 600);
-  }
-
-  profile.preferredSubtitles.forEach((preferred, index) => {
-    if (languages.subtitles.some(actual => languageMatches(actual, preferred))) {
-      score += Math.max(1, 50 - index * 5);
-    }
-  });
-
-  if (languages.hasMetadata && score > 0) score += 10;
-  return score;
+const compatibilityRank: Record<LanguageCompatibility, number> = {
+  compatible: 2,
+  unknown: 1,
+  incompatible: 0,
 };
 
 export const filterAndRankByLanguage = <T extends LanguageCandidate>(
@@ -284,25 +354,33 @@ export const filterAndRankByLanguage = <T extends LanguageCandidate>(
   profile: LanguageProfile,
 ): T[] => {
   const ranked = candidates
-    .map((candidate, index) => ({
-      candidate,
-      index,
-      score: getLanguageCompatibilityScore(candidate, profile),
-      metadata: getCandidateLanguages(candidate).hasMetadata,
-    }))
-    .sort((left, right) => right.score - left.score || left.index - right.index);
+    .map((candidate, index) => {
+      const evaluation = evaluateLanguageCandidate(candidate, profile);
+      return {candidate, index, ...evaluation};
+    })
+    .sort(
+      (left, right) =>
+        compatibilityRank[right.compatibility] -
+          compatibilityRank[left.compatibility] ||
+        right.score - left.score ||
+        left.index - right.index,
+    );
 
   if (profile.mode === 'flexible') {
     return ranked.map(item => item.candidate);
   }
 
-  const compatible = ranked.filter(item => item.score > 0);
+  const compatible = ranked.filter(
+    item => item.compatibility === 'compatible',
+  );
   if (compatible.length > 0) {
     return compatible.map(item => item.candidate);
   }
 
-  if (profile.mode === 'balanced' || profile.allowUnknown) {
-    return ranked.filter(item => !item.metadata).map(item => item.candidate);
+  if (profile.mode === 'balanced' && profile.allowUnknown) {
+    return ranked
+      .filter(item => item.compatibility === 'unknown')
+      .map(item => item.candidate);
   }
 
   return [];
