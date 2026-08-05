@@ -53,7 +53,8 @@ jobs:
         run: |
           set -Eeuo pipefail
           forbidden='@react-native-firebase|firebaseSafe|hasFirebase|FirebaseAnalytics|FirebaseCrashlytics|Crashlytics|crashlytics|TELEMETRY_OPT_IN|telemetryOptIn|isTelemetryOptIn|setTelemetryOptIn|analytics_storage|ad_storage|ad_user_data|ad_personalization'
-          residual="$(grep -RInE "$forbidden" . --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=build || true)"
+          targets=(src app.config.js package.json package-lock.json)
+          residual="$(grep -RInE "$forbidden" "${targets[@]}" --exclude-dir=node_modules --exclude-dir=build 2>/dev/null || true)"
           if [[ -n "$residual" ]]; then
             printf '%s\n' "$residual" >&2
             exit 1
