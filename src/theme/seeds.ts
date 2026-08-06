@@ -3,7 +3,7 @@ export type SeedOption = {
   color: string;
 };
 
-export const DEFAULT_SEED = '#FFFFFF';
+export const DEFAULT_SEED = '#6750A4';
 export const LEGACY_TERTIARY_BACKGROUND = '#171717';
 
 type HexColor = `#${string}`;
@@ -103,7 +103,7 @@ export const LEGACY_NEUTRAL_SURFACE_ROLES = {
  * full Material 3 palette, so every option yields usable contrast in dark mode.
  */
 export const M3_SEEDS: SeedOption[] = [
-  {name: 'White', color: DEFAULT_SEED},
+  {name: 'JoseloFarias', color: DEFAULT_SEED},
   {name: 'Tomato', color: '#FF6347'},
   {name: 'Gray', color: '#9E9E9E'},
   {name: 'Blue', color: '#2196F3'},
