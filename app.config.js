@@ -86,8 +86,12 @@ module.exports = () => {
     'expo-status-bar',
   ];
   const IS_PLAYSTORE = process.env.APP_VARIANT === 'playstore';
-  const PACKAGE_NAME = IS_PLAYSTORE ? 'vega.app' : 'com.vega';
-  const APP_SCHEME = IS_PLAYSTORE ? 'vegaapp' : 'com.vega';
+  const PACKAGE_NAME = IS_PLAYSTORE
+    ? 'com.joselofarias.vega.play'
+    : 'com.joselofarias.vega';
+  const APP_SCHEME = IS_PLAYSTORE
+    ? 'joselofarias.vega.play'
+    : 'joselofarias.vega';
 
   return {
     expo: {
@@ -99,7 +103,7 @@ module.exports = () => {
       autolinking: {exclude: ['expo-splash-screen']},
       plugins,
       slug: 'vega',
-      version: '4.0.3',
+      version: '4.0.3-jf1',
       userInterfaceStyle: 'dark',
       experiments: {
         reactCompiler: true,
@@ -135,7 +139,7 @@ module.exports = () => {
         allowBackup: true,
         adaptiveIcon: {
           foregroundImage: './assets/adaptive_icon.png',
-          backgroundColor: '#000000',
+          backgroundColor: '#6750A4',
         },
         launchMode: 'singleTask',
         supportsPictureInPicture: true,
@@ -145,6 +149,7 @@ module.exports = () => {
       extra: {
         isPlayStore: IS_PLAYSTORE,
         tmdbApiKey,
+        maintainerBrand: 'JoseloFarias',
       },
     },
   };
