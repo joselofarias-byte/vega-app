@@ -4,7 +4,7 @@ const {
   withDangerousMod,
   withMainApplication,
   withAppBuildGradle,
-} = require('@expo/config-plugins');
+} = require('expo/config-plugins');
 
 function withCustomNativeModules(config) {
   // 1. Copy the files over
@@ -64,6 +64,7 @@ function withCustomNativeModules(config) {
 
     const packagesToAdd = [
       'DohPackage()',
+      'HttpDownloadPackage()',
       'TorrentPackage()',
       'LauncherIconPackage()',
     ];
@@ -117,6 +118,14 @@ function withCustomNativeModules(config) {
         /dependencies\s*\{/,
         match =>
           `${match}\n    implementation 'com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0'\n`,
+      );
+    }
+
+    if (!contents.includes('com.squareup.okhttp3:okhttp:4.12.0')) {
+      contents = contents.replace(
+        /dependencies\s*\{/,
+        match =>
+          `${match}\n    implementation 'com.squareup.okhttp3:okhttp:4.12.0'\n`,
       );
     }
 

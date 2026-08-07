@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const {withDangerousMod} = require('@expo/config-plugins');
+const {withDangerousMod} = require('expo/config-plugins');
 
 /**
  * Ensures ic_notification resources exist after prebuild by copying from assets/android/notification/** into
@@ -55,6 +55,7 @@ module.exports = function withAndroidNotificationIcons(config) {
 
       // Common resource buckets to copy if present
       const buckets = [
+        'values',
         'drawable-anydpi-v24',
         'drawable',
         'drawable-mdpi',
