@@ -95,3 +95,6 @@ google-services.json
 # Local code intelligence
 /.codegraph/
 /.codegraph-*/
+
+# Local multi-LLM orchestration
+/.worktrees/
