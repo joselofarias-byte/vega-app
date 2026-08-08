@@ -95,7 +95,7 @@ install_node22() {
   command -v xz >/dev/null 2>&1 || fail "xz is required to bootstrap Node 22"
   command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 
-  local arch sums tmp archive line filename expected actual old cleanup
+  local arch sums tmp archive line filename expected actual extracted old cleanup
   arch="$(node_archive_arch 2>/dev/null || true)"
   [[ -n "$arch" ]] || fail "automatic Node 22 bootstrap supports only Linux arm64/aarch64 and x86_64"
   [[ "$(uname -s)" == 'Linux' ]] || fail "automatic Node 22 bootstrap is Linux-only"
