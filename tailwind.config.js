@@ -69,7 +69,7 @@ module.exports = {
       colors: {
         m3: m3Colors,
         // Legacy palette, retained until every screen is migrated to `m3-*`.
-        primary: '#FF6347',
+        primary: '#6750A4',
         secondary: '#000000',
         tertiary: '#171717',
         quaternary: '#1a1a1a',
