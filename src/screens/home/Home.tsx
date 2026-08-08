@@ -1,4 +1,4 @@
-import {SafeAreaView, ScrollView, RefreshControl, View} from 'react-native';
+import {SafeAreaView, RefreshControl, View} from 'react-native';
 import Slider from '../../components/Slider';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import HeroOptimized from '../../components/Hero';
@@ -14,7 +14,7 @@ import ProviderDrawer from '../../components/ProviderDrawer';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {HomeStackParamList} from '../../App';
 import {Drawer} from 'react-native-drawer-layout';
-import {GestureHandlerRootView} from 'react-native-gesture-handler';
+import {GestureHandlerRootView, ScrollView} from 'react-native-gesture-handler';
 import {providerManager} from '../../lib/services/ProviderManager';
 import {Catalog} from '../../lib/providers/types';
 import Tutorial from '../../components/Touturial';

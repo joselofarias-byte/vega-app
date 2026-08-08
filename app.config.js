@@ -2,10 +2,14 @@ const tmdbApiKey =
   process.env.TMDB_API_KEY || process.env.EXPO_PUBLIC_TMDB_API_KEY || '';
 
 module.exports = () => {
+  const IS_PLAYSTORE = process.env.APP_VARIANT === 'playstore';
+  const PACKAGE_NAME = IS_PLAYSTORE ? 'vega.app' : 'com.vega';
+  const APP_SCHEME = IS_PLAYSTORE ? 'vegaapp' : 'com.vega';
   const plugins = [
     './plugins/with-custom-native-modules.js',
     './plugins/android-native-config.js',
     './plugins/with-saf-copy-module.js',
+    './plugins/with-uri-permission-module.js',
     './plugins/with-proguard-rules.js',
     './plugins/with-jvm-args.js',
     './plugins/with-android-notification-icons.js',
@@ -13,7 +17,6 @@ module.exports = () => {
     './plugins/with-android-release-gradle.js',
     './plugins/with-android-signing.js',
     './plugins/with-android-okhttp.js',
-    ['expo-build-properties', {android: {usePrecompiledHeaders: true}}],
     [
       'react-native-video',
       {
@@ -25,6 +28,12 @@ module.exports = () => {
           useExoplayerHls: true,
           useExoplayerDash: true,
         },
+      },
+    ],
+    [
+      'react-native-google-cast',
+      {
+        expandedController: true,
       },
     ],
     [
@@ -50,6 +59,7 @@ module.exports = () => {
       'expo-build-properties',
       {
         android: {
+          usePrecompiledHeaders: true,
           extraMavenRepos: [
             '../../node_modules/@notifee/react-native/android/libs',
           ],
@@ -75,7 +85,6 @@ module.exports = () => {
         ios: {},
       },
     ],
-
     [
       'expo-dev-client',
       {
@@ -85,10 +94,6 @@ module.exports = () => {
     'expo-font',
     'expo-status-bar',
   ];
-  const IS_PLAYSTORE = process.env.APP_VARIANT === 'playstore';
-  const PACKAGE_NAME = IS_PLAYSTORE ? 'vega.app' : 'com.vega';
-  const APP_SCHEME = IS_PLAYSTORE ? 'vegaapp' : 'com.vega';
-
   return {
     expo: {
       name: 'Vega',
@@ -99,7 +104,7 @@ module.exports = () => {
       autolinking: {exclude: ['expo-splash-screen']},
       plugins,
       slug: 'vega',
-      version: '4.0.3',
+      version: '4.0.4',
       userInterfaceStyle: 'dark',
       experiments: {
         reactCompiler: true,
@@ -107,11 +112,12 @@ module.exports = () => {
       android: {
         minSdkVersion: 28,
         package: PACKAGE_NAME,
-        versionCode: 184,
+        versionCode: 187,
         permissions: [
           'FOREGROUND_SERVICE',
           'FOREGROUND_SERVICE_DATA_SYNC',
           'FOREGROUND_SERVICE_MEDIA_PLAYBACK',
+          'ACCESS_NETWORK_STATE',
           'INTERNET',
           'WRITE_SETTINGS',
         ],
@@ -143,6 +149,9 @@ module.exports = () => {
       ios: {},
       platforms: ['ios', 'android'],
       extra: {
+        eas: {
+          projectId: '40d98354-d3c8-4616-ab2e-70d9c297091f',
+        },
         isPlayStore: IS_PLAYSTORE,
         tmdbApiKey,
       },
