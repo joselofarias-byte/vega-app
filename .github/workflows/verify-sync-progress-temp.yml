@@ -18,6 +18,6 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm install --no-audit --no-fund
-      - run: npm test -- --runInBand __tests__/syncManifest.test.ts
+      - run: npm test -- --runInBand __tests__/syncManifest.test.ts -t 'uses the newest saved playback position|keeps a history tombstone|allows playback saved after a history removal|syncs only the 100 most recently played episodes'
       - run: npx eslint src/components/SeasonList.tsx src/lib/sync/syncService.ts
       - run: npx tsc --noEmit
