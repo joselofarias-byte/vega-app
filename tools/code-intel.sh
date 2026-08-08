@@ -267,6 +267,7 @@ cbm_mcp() {
   order="$(active_order)"
   cbm_env
   mkdir -p "$CBM_CACHE_ROOT"
+  # Explicit MCP pilot: disable automatic indexing/watcher before daemon-backed mode.
   "$CBM_BIN" config set auto_index false >/dev/null
   "$CBM_BIN" config set auto_watch false >/dev/null
   if [[ -f "$WORKFLOW" ]]; then
