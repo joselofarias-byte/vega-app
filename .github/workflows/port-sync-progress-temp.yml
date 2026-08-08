@@ -1,0 +1,252 @@
+name: Temporary sync progress port
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  port:
+    if: github.actor != 'github-actions[bot]' || !contains(github.event.head_commit.message, 'feat(sync): sync manual episode progress')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Apply selective upstream port
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          season = Path('src/components/SeasonList.tsx')
+          s = season.read_text()
+          if "import {setSyncedEpisodeProgress} from '../lib/sync/syncService';" not in s:
+              old = "import EpisodeRowContent from './EpisodeRowContent';\n"
+              new = old + "import {setSyncedEpisodeProgress} from '../lib/sync/syncService';\n"
+              if old not in s:
+                  raise SystemExit('SeasonList import anchor missing')
+              s = s.replace(old, new, 1)
+
+          old = '''      cacheStorage.setString(
+            stickyMenu.link,
+            JSON.stringify({
+              position: 10000,
+              duration: 1,
+            }),
+          );
+      setStickyMenu({active: false});
+    }
+  }, [stickyMenu.link]);'''
+          new = '''      cacheStorage.setString(
+        stickyMenu.link,
+        JSON.stringify({
+          position: 10000,
+          duration: 1,
+        }),
+      );
+      const episode = [...episodeList, ...(activeSeason.directLinks || [])].find(
+        item => item.link === stickyMenu.link,
+      );
+      if (episode) {
+        setSyncedEpisodeProgress({
+          episode,
+          title: metaTitle,
+          poster: poster.poster,
+          background: poster.background,
+          provider: providerValue,
+          infoUrl: routeParams.link,
+          type,
+          position: 10000,
+          duration: 1,
+        });
+      }
+      setStickyMenu({active: false});
+    }
+  }, [
+    activeSeason.directLinks,
+    episodeList,
+    metaTitle,
+    poster.background,
+    poster.poster,
+    providerValue,
+    routeParams.link,
+    stickyMenu.link,
+    type,
+  ]);'''
+          if 'position: 10000' in s and 'setSyncedEpisodeProgress({' not in s[s.find('// Memoized mark as watched handler'):s.find('// Memoized mark as unwatched handler')]:
+              if old not in s:
+                  raise SystemExit('watched handler anchor missing')
+              s = s.replace(old, new, 1)
+
+          old = '''      cacheStorage.setString(
+        stickyMenu.link,
+        JSON.stringify({
+          position: 0,
+          duration: 1,
+        }),
+      );
+      setStickyMenu({active: false});
+    }
+  }, [stickyMenu.link]);'''
+          new = '''      cacheStorage.setString(
+        stickyMenu.link,
+        JSON.stringify({
+          position: 0,
+          duration: 1,
+        }),
+      );
+      const episode = [...episodeList, ...(activeSeason.directLinks || [])].find(
+        item => item.link === stickyMenu.link,
+      );
+      if (episode) {
+        setSyncedEpisodeProgress({
+          episode,
+          title: metaTitle,
+          poster: poster.poster,
+          background: poster.background,
+          provider: providerValue,
+          infoUrl: routeParams.link,
+          type,
+          position: 0,
+          duration: 1,
+        });
+      }
+      setStickyMenu({active: false});
+    }
+  }, [
+    activeSeason.directLinks,
+    episodeList,
+    metaTitle,
+    poster.background,
+    poster.poster,
+    providerValue,
+    routeParams.link,
+    stickyMenu.link,
+    type,
+  ]);'''
+          block = s[s.find('// Memoized mark as unwatched handler'):s.find('// Memoized sticky menu external player handler')]
+          if 'setSyncedEpisodeProgress({' not in block:
+              if old not in s:
+                  raise SystemExit('unwatched handler anchor missing')
+              s = s.replace(old, new, 1)
+          season.write_text(s)
+
+          service = Path('src/lib/sync/syncService.ts')
+          s = service.read_text()
+          old = '''  Object.values(limitedHistory).forEach(item => {
+    if (!item.link || !item.provider) {
+      return;
+    }'''
+          new = '''  Object.values(limitedHistory).forEach(item => {
+    const episode = item.episode;
+    const position = item.progress ?? item.currentTime ?? 0;
+    const duration = item.duration ?? 0;
+    if (episode?.link && duration > 0) {
+      cacheStorage.setString(
+        episode.link,
+        JSON.stringify({position, duration}),
+      );
+    }
+    if (!item.link || !item.provider) {
+      return;
+    }'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          old = '''      const position = item.progress ?? item.currentTime ?? 0;
+      const duration = item.duration ?? 0;
+      if (episode.link && position > 0) {
+        cacheStorage.setString(
+          episode.link,
+          JSON.stringify({position, duration}),
+        );
+      }
+      return {'''
+          new = '''      const position = item.progress ?? item.currentTime ?? 0;
+      const duration = item.duration ?? 0;
+      return {'''
+          if old in s:
+              s = s.replace(old, new, 1)
+
+          if 'export const setSyncedEpisodeProgress' not in s:
+              anchor = '''const applyRemoteDownloads = async (
+  downloads: Record<string, SyncedDownload>,
+) => {'''
+              fn = '''export const setSyncedEpisodeProgress = ({
+  episode,
+  title,
+  poster,
+  background,
+  provider,
+  infoUrl,
+  type,
+  position,
+  duration,
+}: {
+  episode: ContinueWatchingItem['episode'];
+  title: string;
+  poster?: string;
+  background?: string;
+  provider: string;
+  infoUrl: string;
+  type: string;
+  position: number;
+  duration: number;
+}) => {
+  const id = episode.sourceLink || episode.id || episode.link;
+  if (!id) {
+    return;
+  }
+  const updatedAt = Date.now();
+  const history = getLocalHistory();
+  history[id] = {
+    id,
+    title,
+    poster,
+    background,
+    provider,
+    link: infoUrl,
+    duration,
+    progress: position,
+    currentTime: position,
+    isSeries: type === 'series',
+    lastPlayed: updatedAt,
+    episodeTitle: episode.title,
+    episode,
+    type,
+    updatedAt,
+  };
+  saveLocalHistory(history);
+  cacheStorage.setString(
+    episode.link,
+    JSON.stringify({position, duration}),
+  );
+  schedulePublish();
+};
+
+'''
+              if anchor not in s:
+                  raise SystemExit('sync service function anchor missing')
+              s = s.replace(anchor, fn + anchor, 1)
+          if 'const MAX_HISTORY_ITEMS = 100;' not in s:
+              raise SystemExit('history limit changed unexpectedly')
+          service.write_text(s)
+          PY
+
+          git diff --check
+          grep -q "setSyncedEpisodeProgress" src/components/SeasonList.tsx
+          grep -q "export const setSyncedEpisodeProgress" src/lib/sync/syncService.ts
+          grep -q "const MAX_HISTORY_ITEMS = 100;" src/lib/sync/syncService.ts
+          if git diff --quiet; then
+            echo 'No changes required.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/components/SeasonList.tsx src/lib/sync/syncService.ts
+          git commit -m 'feat(sync): sync manual episode progress'
+          git push origin HEAD:main
