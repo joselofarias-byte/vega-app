@@ -17,7 +17,7 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      - run: npm install --no-audit --no-fund
       - run: npm test -- --runInBand __tests__/syncManifest.test.ts
       - run: npx eslint src/components/SeasonList.tsx src/lib/sync/syncService.ts
       - run: npx tsc --noEmit
