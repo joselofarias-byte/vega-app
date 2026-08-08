@@ -189,6 +189,15 @@ const applyRemoteHistory = (history: Record<string, SyncedHistory>) => {
   const limitedHistory = saveLocalHistory(history);
   const latestByInfoUrl = new Map<string, SyncedHistory>();
   Object.values(limitedHistory).forEach(item => {
+    const episode = item.episode;
+    const position = item.progress ?? item.currentTime ?? 0;
+    const duration = item.duration ?? 0;
+    if (episode?.link && duration > 0) {
+      cacheStorage.setString(
+        episode.link,
+        JSON.stringify({position, duration}),
+      );
+    }
     if (!item.link || !item.provider) {
       return;
     }
@@ -210,12 +219,6 @@ const applyRemoteHistory = (history: Record<string, SyncedHistory>) => {
       };
       const position = item.progress ?? item.currentTime ?? 0;
       const duration = item.duration ?? 0;
-      if (episode.link && position > 0) {
-        cacheStorage.setString(
-          episode.link,
-          JSON.stringify({position, duration}),
-        );
-      }
       return {
         id: item.link,
         title: item.title,
@@ -253,6 +256,58 @@ const schedulePublish = () => {
       console.warn('[VegaSync] Failed to publish manifest:', error),
     );
   }, PUBLISH_DELAY_MS);
+};
+
+export const setSyncedEpisodeProgress = ({
+  episode,
+  title,
+  poster,
+  background,
+  provider,
+  infoUrl,
+  type,
+  position,
+  duration,
+}: {
+  episode: ContinueWatchingItem['episode'];
+  title: string;
+  poster?: string;
+  background?: string;
+  provider: string;
+  infoUrl: string;
+  type: string;
+  position: number;
+  duration: number;
+}) => {
+  const id = episode.sourceLink || episode.id || episode.link;
+  if (!id) {
+    return;
+  }
+  const updatedAt = Date.now();
+  const history = getLocalHistory();
+  history[id] = {
+    id,
+    title,
+    poster,
+    background,
+    provider,
+    link: infoUrl,
+    duration,
+    progress: position,
+    currentTime: position,
+    isSeries: type === 'series',
+    lastPlayed: updatedAt,
+    episodeTitle: episode.title,
+    episode,
+    type,
+    updatedAt,
+  };
+  saveLocalHistory(history);
+  cacheStorage.setString(
+    episode.link,
+    JSON.stringify({position, duration}),
+  );
+  schedulePublish();
 };
 
 const applyRemoteDownloads = async (
