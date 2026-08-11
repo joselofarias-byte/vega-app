@@ -86,8 +86,8 @@ module.exports = () => {
     'expo-status-bar',
   ];
   const IS_PLAYSTORE = process.env.APP_VARIANT === 'playstore';
-  const PACKAGE_NAME = IS_PLAYSTORE ? 'vega.app' : 'com.vega';
-  const APP_SCHEME = IS_PLAYSTORE ? 'vegaapp' : 'com.vega';
+  const PACKAGE_NAME = 'com.joselofarias.vega';
+  const APP_SCHEME = 'joselofarias.vega';
 
   return {
     expo: {
