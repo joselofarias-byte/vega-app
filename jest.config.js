@@ -1,7 +1,7 @@
 module.exports = {
   preset: '@react-native/jest-preset',
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@expo/.*|expo(?:-.*)?|react-native-image-colors|react-native-markdown-display)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@react-navigation/.*|@expo/.*|expo(?:-.*)?|react-native-image-colors|react-native-markdown-display)/)',
   ],
   moduleNameMapper: {
     '^@expo/ui/jetpack-compose$':
