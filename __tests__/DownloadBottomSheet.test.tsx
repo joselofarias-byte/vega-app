@@ -4,7 +4,7 @@ import renderer, {act} from 'react-test-renderer';
 
 const mockBottomSheetProps = jest.fn();
 
-jest.mock('@gorhom/bottom-sheet', () => {
+jest.mock('@expo/ui/community/bottom-sheet', () => {
   const ReactModule = require('react');
   const ReactNative = require('react-native');
   const BottomSheet = ReactModule.forwardRef(
@@ -20,6 +20,7 @@ jest.mock('@gorhom/bottom-sheet', () => {
     __esModule: true,
     default: BottomSheet,
     BottomSheetScrollView: ReactNative.ScrollView,
+    BottomSheetView: ReactNative.View,
   };
 });
 
