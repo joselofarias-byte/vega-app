@@ -1,5 +1,4 @@
 import {View, ToastAndroid, Linking} from 'react-native';
-// import pkg from '../../../package.json';
 import React, {useState} from 'react';
 import {settingsStorage} from '../../lib/storage';
 import * as RNFS from '@dr.pogodin/react-native-fs';
@@ -12,6 +11,13 @@ import SettingsSwitchRow from '../../components/ui/SettingsSwitchRow';
 import AppText from '../../components/ui/Text';
 import LoadingIndicator from '../../components/ui/LoadingIndicator';
 import {showAppDialog} from '../../lib/zustand/appDialogStore';
+
+const JOSELOFARIAS_RELEASES_API =
+  'https://api.github.com/repos/joselofarias-byte/vega-app/releases/latest';
+const JOSELOFARIAS_EVM_ADDRESS =
+  '0x5d580ac4f1eabff84379fa8e217df4684ad30934';
+const JOSELOFARIAS_BINANCE_PAY_URL =
+  'https://app.binance.com/uni-qr/Dhzk73AN';
 
 const deletePartialFile = async (filePath: string) => {
   try {
@@ -26,7 +32,6 @@ const downloadUpdate = async (url: string, name: string) => {
   await notificationService.requestPermission();
 
   const filePath = `${RNFS.CachesDirectoryPath}/${name}`;
-
   let expectedSize = 0;
 
   const {promise} = RNFS.downloadFile({
@@ -82,7 +87,6 @@ const downloadUpdate = async (url: string, name: string) => {
   }
 };
 
-// handle check for update
 export const checkForUpdate = async (
   setUpdateLoading: React.Dispatch<React.SetStateAction<boolean>>,
   autoDownload: boolean,
@@ -90,9 +94,10 @@ export const checkForUpdate = async (
 ) => {
   setUpdateLoading(true);
   try {
-    const res = await fetch(
-      'https://api.github.com/repos/Zenda-Cross/vega-app/releases/latest',
-    );
+    const res = await fetch(JOSELOFARIAS_RELEASES_API);
+    if (!res.ok) {
+      throw new Error(`Release lookup failed: ${res.status}`);
+    }
     const data = await res.json();
     const localVersion = Application.nativeApplicationVersion;
     const remoteVersion = Number(
@@ -166,7 +171,7 @@ const About = () => {
           About Vega
         </AppText>
         <AppText role="bodyLarge" className="mt-1 text-m3-on-surface-variant">
-          App information and updates
+          JoseloFarias edition · app information, support and updates
         </AppText>
       </View>
 
@@ -182,7 +187,7 @@ const About = () => {
           <>
             <SettingsSwitchRow
               title="Auto install updates"
-              description="Download and install new releases automatically"
+              description="Download and install new JoseloFarias releases automatically"
               value={autoDownload}
               onValueChange={next => {
                 setAutoDownload(next);
@@ -191,7 +196,7 @@ const About = () => {
             />
             <SettingsSwitchRow
               title="Check on startup"
-              description="Look for a new release when Vega opens"
+              description="Look for a new JoseloFarias release when Vega opens"
               value={autoCheckUpdate}
               onValueChange={next => {
                 setAutoCheckUpdate(next);
@@ -200,7 +205,7 @@ const About = () => {
             />
             <SettingsRow
               title="Check for updates"
-              description="Compare this build with the latest release"
+              description="Compare this build with the latest JoseloFarias release"
               icon="update"
               divider={false}
               trailing={
@@ -215,6 +220,26 @@ const About = () => {
           </>
         )}
       </SettingsSection>
+
+      <SettingsSection title="Support JoseloFarias">
+        <SettingsRow
+          title="EVM multichain"
+          description={`${JOSELOFARIAS_EVM_ADDRESS}\nPreferred: USDT · USDC · FDUSD`}
+          icon="wallet-outline"
+        />
+        <SettingsRow
+          title="Compatible tokens"
+          description="Other tokens are accepted when both token and selected EVM network are compatible. Verify both before sending."
+          icon="alert-circle-outline"
+        />
+        <SettingsRow
+          title="Binance Pay · CriptoUy"
+          description="Open Binance Pay"
+          icon="open-in-new"
+          divider={false}
+          onPress={() => Linking.openURL(JOSELOFARIAS_BINANCE_PAY_URL)}
+        />
+      </SettingsSection>
     </View>
   );
 };
@@ -223,27 +248,21 @@ export default About;
 
 function compareVersions(localVersion: string, remoteVersion: string): boolean {
   try {
-    // Split versions into arrays and convert to numbers
     const local = localVersion.split('.').map(Number);
     const remote = remoteVersion.split('.').map(Number);
 
-    // Compare major version
     if (remote[0] > local[0]) {
       return true;
     }
     if (remote[0] < local[0]) {
       return false;
     }
-
-    // Compare minor version
     if (remote[1] > local[1]) {
       return true;
     }
     if (remote[1] < local[1]) {
       return false;
     }
-
-    // Compare patch version
     if (remote[2] > local[2]) {
       return true;
     }
