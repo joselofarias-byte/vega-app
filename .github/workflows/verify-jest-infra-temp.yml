@@ -6,6 +6,10 @@ on:
       - port/upstream-player-buffering-20260812
     paths:
       - jest.config.js
+      - __mocks__/**
+      - __tests__/downloadManagerLifecycle.test.ts
+      - __tests__/DownloadBottomSheet.test.tsx
+      - __tests__/App.test.tsx
       - .github/workflows/verify-jest-infra-temp.yml
 
 permissions:
@@ -21,6 +25,45 @@ jobs:
           ref: port/upstream-player-buffering-20260812
           fetch-depth: 0
 
+      - name: Normalize lifecycle fixture from exact pre-edit blob
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import subprocess
+          from pathlib import Path
+
+          base = '6af32059c56eb7d2f7ddedc6c8d0a8e63a3ad824'
+          path = '__tests__/downloadManagerLifecycle.test.ts'
+          data = subprocess.check_output(['git', 'show', f'{base}:{path}'])
+          needle = b'let mockDownloadConcurrency = 2;\r\n\r\n'
+          if data.count(needle) != 1:
+              raise SystemExit(f'expected one insertion point, found {data.count(needle)}')
+          mock = (
+              b"jest.mock('react-native-image-colors', () => ({\r\n"
+              b"  cache: {removeItem: jest.fn()},\r\n"
+              b"  getColors: jest.fn(async () => ({\r\n"
+              b"    platform: 'android',\r\n"
+              b"    lightVibrant: '#FFFFFF',\r\n"
+              b"    vibrant: '#FFFFFF',\r\n"
+              b"    dominant: '#FFFFFF',\r\n"
+              b"    average: '#FFFFFF',\r\n"
+              b"    darkVibrant: '#FFFFFF',\r\n"
+              b"  })),\r\n"
+              b"}));\r\n\r\n"
+          )
+          data = data.replace(needle, needle + mock, 1)
+          Path(path).write_bytes(data)
+          PY
+
+          python3 - <<'PY'
+          from pathlib import Path
+          data = Path('__tests__/downloadManagerLifecycle.test.ts').read_bytes()
+          if b'\r\n' not in data:
+              raise SystemExit('CRLF preservation failed')
+          print('lifecycle fixture restored with CRLF and one native facade mock')
+          PY
+
       - name: Set up Node 22
         uses: actions/setup-node@v4
         with:
@@ -33,7 +76,7 @@ jobs:
       - name: Apply postinstall adaptations
         run: npm run postinstall
 
-      - name: Verify former parse failures
+      - name: Verify former infrastructure failures
         run: >-
           npx jest --runInBand
           __tests__/downloadManagerLifecycle.test.ts
@@ -52,13 +95,19 @@ jobs:
           echo "JEST_STATUS=$status" >> "$GITHUB_ENV"
           grep -E 'Test Suites:|Tests:' /tmp/jest-full.log || true
 
-      - name: Remove temporary workflow after infrastructure success
+      - name: Persist infrastructure fixes and remove temporary workflow
         shell: bash
         run: |
           set -Eeuo pipefail
           rm -f .github/workflows/verify-jest-infra-temp.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/verify-jest-infra-temp.yml
-          git commit -m 'chore(ci): remove temporary Jest infrastructure verification'
+          git add \
+            jest.config.js \
+            __mocks__/expo-vector-icons.js \
+            __mocks__/expo-ui-jetpack-compose.js \
+            __tests__/downloadManagerLifecycle.test.ts \
+            __tests__/DownloadBottomSheet.test.tsx \
+            .github/workflows/verify-jest-infra-temp.yml
+          git commit -m 'test: align Jest with current RN and Expo facades'
           git push origin HEAD:port/upstream-player-buffering-20260812
