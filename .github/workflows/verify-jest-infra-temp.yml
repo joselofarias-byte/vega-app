@@ -1,0 +1,64 @@
+name: Verify Jest infrastructure (temporary)
+
+on:
+  push:
+    branches:
+      - port/upstream-player-buffering-20260812
+    paths:
+      - jest.config.js
+      - .github/workflows/verify-jest-infra-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  verify-jest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: port/upstream-player-buffering-20260812
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Clean install
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Apply postinstall adaptations
+        run: npm run postinstall
+
+      - name: Verify former parse failures
+        run: >-
+          npx jest --runInBand
+          __tests__/downloadManagerLifecycle.test.ts
+          __tests__/Extensions.test.tsx
+          __tests__/DownloadBottomSheet.test.tsx
+          __tests__/App.test.tsx
+
+      - name: Run full suite and preserve remaining failures
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          set +e
+          npm test -- --runInBand 2>&1 | tee /tmp/jest-full.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "JEST_STATUS=$status" >> "$GITHUB_ENV"
+          grep -E 'Test Suites:|Tests:' /tmp/jest-full.log || true
+
+      - name: Remove temporary workflow after infrastructure success
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -f .github/workflows/verify-jest-infra-temp.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/verify-jest-infra-temp.yml
+          git commit -m 'chore(ci): remove temporary Jest infrastructure verification'
+          git push origin HEAD:port/upstream-player-buffering-20260812
