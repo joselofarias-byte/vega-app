@@ -26,6 +26,26 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: Pin React DOM and regenerate lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          if (pkg.dependencies?.react !== '19.2.3') {
+            throw new Error(`Unexpected React version: ${pkg.dependencies?.react}`);
+          }
+          const current = pkg.dependencies?.['react-dom'];
+          if (current && current !== '19.2.3') {
+            throw new Error(`Unexpected react-dom version: ${current}`);
+          }
+          pkg.dependencies['react-dom'] = '19.2.3';
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
       - name: Validate dependency and privacy invariants
         shell: bash
         run: |
@@ -39,6 +59,12 @@ jobs:
 
           if (pkg.version !== '4.0.3' || lock.version !== '4.0.3') {
             throw new Error('Application version changed unexpectedly');
+          }
+          if (pkg.dependencies?.react !== '19.2.3' || pkg.dependencies?.['react-dom'] !== '19.2.3') {
+            throw new Error('React/react-dom versions are not pinned together');
+          }
+          if (lock.packages?.['node_modules/react-dom']?.version !== '19.2.3') {
+            throw new Error(`Locked react-dom is ${lock.packages?.['node_modules/react-dom']?.version || 'missing'}`);
           }
           if (pkg.dependencies?.['@8man/react-native-media-console'] !== expected) {
             throw new Error('package.json media-console spec mismatch');
@@ -69,10 +95,11 @@ jobs:
           }
 
           console.log(`media-console=${locked.version}`);
+          console.log('React/react-dom=19.2.3');
           console.log('dependency/privacy invariants: OK');
           NODE
 
-      - name: Verify clean install from regenerated lockfile
+      - name: Verify clean install
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -85,7 +112,7 @@ jobs:
           node --check scripts/fix-rnv-buffer-memory.js
           node --check scripts/fix-player-buffering-source.js
 
-      - name: Apply postinstall adaptations exactly once
+      - name: Apply adaptations
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -106,7 +133,7 @@ jobs:
           set -Eeuo pipefail
           npm test -- --runInBand
 
-      - name: Remove temporary validation workflow
+      - name: Commit validated dependency state and remove temporary workflow
         if: success()
         shell: bash
         run: |
@@ -114,6 +141,6 @@ jobs:
           rm -f .github/workflows/normalize-media-console-lock-temp.yml
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/normalize-media-console-lock-temp.yml
-          git commit -m 'chore(ci): remove temporary media-console validation'
+          git add package.json package-lock.json .github/workflows/normalize-media-console-lock-temp.yml
+          git commit -m 'fix(deps): align React DOM and validate media-console alpha.43'
           git push origin HEAD:port/upstream-player-buffering-20260812
