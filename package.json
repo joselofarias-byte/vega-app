@@ -13,7 +13,7 @@
     "pretest": "npm run build:sandbox",
     "prebuild": "npm run build:sandbox && expo prebuild",
     "prebuild:clean": "npm run build:sandbox && expo prebuild --clean",
-    "postinstall": "patch-package && node scripts/fix-rnv-buffer-memory.js"
+    "postinstall": "patch-package && node scripts/fix-rnv-buffer-memory.js && node scripts/fix-player-buffering-source.js"
   },
   "dependencies": {
     "@8man/react-native-media-console": "^2.2.4-alpha.35",
