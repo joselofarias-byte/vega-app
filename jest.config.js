@@ -13,6 +13,7 @@ module.exports = {
       '<rootDir>/__mocks__/react-native-mmkv-storage.js',
     '^react-native-linear-gradient$':
       '<rootDir>/__mocks__/react-native-linear-gradient.js',
+    '^react-native-reanimated$': 'react-native-reanimated/mock',
     '\\.(css|less|scss|sass)$':
       '<rootDir>/__mocks__/expo-ui-jetpack-compose-modifiers.js',
   },
