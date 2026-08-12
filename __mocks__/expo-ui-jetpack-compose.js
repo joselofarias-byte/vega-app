@@ -13,6 +13,11 @@ const button = ({children, enabled = true, onClick, ...props}) =>
   );
 
 const slotComponent = passthrough;
+const alertDialog = passthrough;
+alertDialog.Title = slotComponent;
+alertDialog.Text = slotComponent;
+alertDialog.Buttons = slotComponent;
+
 const textField = React.forwardRef(
   ({children, onValueChange, keyboardActions, ...props}, ref) => {
     React.useImperativeHandle(ref, () => ({
@@ -40,6 +45,8 @@ module.exports = {
   Card: passthrough,
   ElevatedCard: passthrough,
   OutlinedCard: passthrough,
+  AlertDialog: alertDialog,
+  BasicAlertDialog: passthrough,
   Text: text,
   Button: button,
   FilledTonalButton: button,
