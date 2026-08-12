@@ -1,0 +1,123 @@
+name: Update media-console lockfile (temporary)
+
+on:
+  push:
+    branches:
+      - port/upstream-player-buffering-20260812
+    paths:
+      - .github/workflows/update-media-console-lock-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: port/upstream-player-buffering-20260812
+          fetch-depth: 0
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Update only media-console and lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
+          const expected = '^2.2.4-alpha.35';
+          const next = '^2.2.4-alpha.43';
+          const current = pkg.dependencies?.['@8man/react-native-media-console'];
+          if (current !== expected && current !== next) {
+            throw new Error(`Unexpected media-console dependency: ${current}`);
+          }
+          pkg.dependencies['@8man/react-native-media-console'] = next;
+          fs.writeFileSync(path, JSON.stringify(pkg, null, 2) + '\n');
+          NODE
+
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Validate lockfile and privacy constraints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          node <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const expected = '^2.2.4-alpha.43';
+          const locked = lock.packages?.['node_modules/@8man/react-native-media-console'];
+
+          if (pkg.version !== '4.0.3' || lock.version !== '4.0.3') {
+            throw new Error('Application version changed unexpectedly');
+          }
+          if (pkg.dependencies?.['@8man/react-native-media-console'] !== expected) {
+            throw new Error('package.json media-console spec is not alpha.43');
+          }
+          if (lock.packages?.['']?.dependencies?.['@8man/react-native-media-console'] !== expected) {
+            throw new Error('package-lock root media-console spec is not alpha.43');
+          }
+          if (locked?.version !== '2.2.4-alpha.43') {
+            throw new Error(`Locked media-console is ${locked?.version || 'missing'}`);
+          }
+
+          const forbidden = [
+            '@react-native-firebase/app',
+            '@react-native-firebase/analytics',
+            '@react-native-firebase/crashlytics',
+            'react-native-google-cast',
+          ];
+          for (const name of forbidden) {
+            if (Object.prototype.hasOwnProperty.call(pkg.dependencies || {}, name)) {
+              throw new Error(`Forbidden dependency restored in package.json: ${name}`);
+            }
+            if (Object.prototype.hasOwnProperty.call(lock.packages || {}, `node_modules/${name}`)) {
+              throw new Error(`Forbidden dependency restored in package-lock.json: ${name}`);
+            }
+          }
+
+          console.log(`media-console=${locked.version}`);
+          console.log('privacy constraints: OK');
+          NODE
+
+      - name: Ensure only expected dependency files changed
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          changed="$(git diff --name-only)"
+          printf '%s\n' "$changed"
+          unexpected="$(printf '%s\n' "$changed" | grep -Ev '^(package.json|package-lock.json)$' || true)"
+          if [[ -n "$unexpected" ]]; then
+            echo "Unexpected modified files:" >&2
+            printf '%s\n' "$unexpected" >&2
+            exit 1
+          fi
+
+      - name: Remove temporary workflow and commit result
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -f .github/workflows/update-media-console-lock-temp.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json .github/workflows/update-media-console-lock-temp.yml
+
+          if git diff --cached --quiet; then
+            echo 'Nothing to commit'
+            exit 0
+          fi
+
+          git commit -m 'build(deps): update media-console to alpha.43'
+          git push origin HEAD:port/upstream-player-buffering-20260812
