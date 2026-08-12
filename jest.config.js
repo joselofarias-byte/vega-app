@@ -9,6 +9,8 @@ module.exports = {
     '^@expo/ui/jetpack-compose/modifiers$':
       '<rootDir>/__mocks__/expo-ui-jetpack-compose-modifiers.js',
     '^@expo/vector-icons(?:/.*)?$': '<rootDir>/__mocks__/expo-vector-icons.js',
+    '^react-native-mmkv-storage$':
+      '<rootDir>/__mocks__/react-native-mmkv-storage.js',
     '\\.(css|less|scss|sass)$':
       '<rootDir>/__mocks__/expo-ui-jetpack-compose-modifiers.js',
   },
