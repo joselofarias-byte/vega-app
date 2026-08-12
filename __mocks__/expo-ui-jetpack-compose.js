@@ -17,6 +17,8 @@ const alertDialog = passthrough;
 alertDialog.Title = slotComponent;
 alertDialog.Text = slotComponent;
 alertDialog.Buttons = slotComponent;
+alertDialog.ConfirmButton = slotComponent;
+alertDialog.DismissButton = slotComponent;
 
 const textField = React.forwardRef(
   ({children, onValueChange, keyboardActions, ...props}, ref) => {
