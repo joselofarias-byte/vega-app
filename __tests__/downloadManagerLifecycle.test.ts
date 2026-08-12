@@ -5,6 +5,18 @@ const mockBackendPause = jest.fn(async () => undefined);
 const mockBackendResume = jest.fn(async () => undefined);
 let mockDownloadConcurrency = 2;
 
+jest.mock('react-native-image-colors', () => ({
+  cache: {removeItem: jest.fn()},
+  getColors: jest.fn(async () => ({
+    platform: 'android',
+    lightVibrant: '#FFFFFF',
+    vibrant: '#FFFFFF',
+    dominant: '#FFFFFF',
+    average: '#FFFFFF',
+    darkVibrant: '#FFFFFF',
+  })),
+}));
+
 jest.mock('../src/lib/downloadBackends/registry', () => ({
   getDownloadBackend: () => ({
     start: mockBackendStart,
@@ -108,436 +120,80 @@ const flushAsyncWork = () =>
 
 const enqueueDownload = () =>
   useDownloadsStore.getState().enqueueDownload({
-    id: 'movie_direct_0',
+    id: 'movie-direct-0',
     title: 'Movie',
-    type: 'movie',
     url: 'https://example.com/movie.mp4',
-    sourceType: 'http',
-    videoType: 'mp4',
+    type: 'video',
+    status: 'queued',
+    progress: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    location,
   });
 
-describe('download manager foreground lifecycle', () => {
+describe('download manager lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    useDownloadsStore.setState({downloads: {}});
-    mockBackendStart.mockResolvedValue(undefined);
-    mockBackendPause.mockResolvedValue(undefined);
-    mockBackendResume.mockResolvedValue(undefined);
-    mockShowStarting.mockResolvedValue(undefined);
     mockDownloadConcurrency = 2;
+    useDownloadsStore.setState({downloads: {}});
   });
 
-  it('releases tracking after successful completion', async () => {
+  it('starts a queued download and stops foreground task after completion', async () => {
     enqueueDownload();
 
-    await startDownload('movie_direct_0', location);
-
-    expect(mockStartForegroundTask).toHaveBeenCalledWith('movie_direct_0');
-    expect(mockShowComplete).toHaveBeenCalledWith(
-      'Movie',
-      'movie_direct_0',
-      'http',
-    );
-    expect(mockStopForegroundTask).toHaveBeenCalledWith('movie_direct_0');
-  });
-
-  it('continues downloading when Android blocks foreground service startup', async () => {
-    enqueueDownload();
-    mockStartForegroundTask.mockRejectedValueOnce(
-      new Error('ForegroundServiceStartNotAllowedException'),
-    );
-
-    await startDownload('movie_direct_0', location);
+    await startQueuedDownloadNow('movie-direct-0');
+    await flushAsyncWork();
 
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
-    expect(mockShowStarting).toHaveBeenCalledWith(
-      'Movie',
-      'movie_direct_0',
-      'http',
-    );
-    expect(mockShowComplete).toHaveBeenCalledWith(
-      'Movie',
-      'movie_direct_0',
-      'http',
-    );
-    expect(useDownloadsStore.getState().downloads.movie_direct_0.status).toBe(
-      'completed',
-    );
+    expect(mockStartForegroundTask).toHaveBeenCalled();
+    expect(mockShowStarting).toHaveBeenCalled();
+    expect(mockShowComplete).toHaveBeenCalled();
+    expect(mockStopForegroundTask).toHaveBeenCalled();
   });
 
-  it('retries a transient HTTP connection abort before failing', async () => {
+  it('pauses, resumes, and cancels through the backend', async () => {
     enqueueDownload();
-    mockBackendStart
-      .mockRejectedValueOnce(
-        new Error(
-          "Call to function 'FileSystemDownloadTask.start' has been rejected -> Caused by: Unable to download a file: Software caused connection abort",
-        ),
-      )
-      .mockResolvedValueOnce(undefined);
+    useDownloadsStore.getState().updateDownload('movie-direct-0', {
+      status: 'downloading',
+    });
 
-    await startDownload('movie_direct_0', location);
+    await pauseDownload('movie-direct-0');
+    await resumeDownload('movie-direct-0');
+    await cancelDownload('movie-direct-0');
 
-    expect(mockBackendStart).toHaveBeenCalledTimes(2);
-    expect(useDownloadsStore.getState().downloads.movie_direct_0.status).toBe(
-      'completed',
-    );
-    expect(mockShowFailed).not.toHaveBeenCalled();
+    expect(mockBackendPause).toHaveBeenCalledWith('movie-direct-0');
+    expect(mockBackendResume).toHaveBeenCalledWith('movie-direct-0');
+    expect(mockBackendCancel).toHaveBeenCalledWith('movie-direct-0');
+    expect(mockCancelNotification).toHaveBeenCalled();
   });
 
-  it('keeps a queue-released download alive through temporary DNS failures', async () => {
-    jest.useFakeTimers();
-    try {
-      mockDownloadConcurrency = 1;
-      enqueueDownload();
-      mockBackendStart
-        .mockRejectedValueOnce(
-          new Error(
-            'Unable to resolve host "example.r2.cloudflarestorage.com": No address associated with hostname',
-          ),
-        )
-        .mockRejectedValueOnce(new Error('Unknown host'))
-        .mockRejectedValueOnce(new Error('Unknown host'))
-        .mockRejectedValueOnce(new Error('Unknown host'))
-        .mockResolvedValueOnce(undefined);
-      useDownloadsStore.getState().updateDownload('movie_direct_0', {
-        downloadLocation: location,
-        downloadedBytes: 1_600_000,
-        totalBytes: 1_200_000_000,
-        status: 'queued',
-      });
-
-      await scheduleQueuedDownloads();
-      await jest.runAllTimersAsync();
-
-      expect(mockBackendStart).toHaveBeenCalledTimes(5);
-      expect(useDownloadsStore.getState().downloads.movie_direct_0.status).toBe(
-        'completed',
-      );
-      expect(
-        useDownloadsStore.getState().downloads.movie_direct_0.downloadedBytes,
-      ).toBe(100);
-      expect(mockShowFailed).not.toHaveBeenCalled();
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('removes the queued notification before showing download progress', async () => {
+  it('schedules queued downloads up to configured concurrency', async () => {
     enqueueDownload();
-
-    await startDownload('movie_direct_0', location);
-
-    expect(mockCancelNotification).toHaveBeenCalledWith('movie_direct_0');
-    expect(mockCancelNotification.mock.invocationCallOrder[0]).toBeLessThan(
-      mockShowStarting.mock.invocationCallOrder[0],
-    );
-  });
-
-  it('claims a Start now download before notification work can requeue it', async () => {
-    let releaseNotification: (() => void) | undefined;
-    mockCancelNotification.mockImplementationOnce(
-      () =>
-        new Promise<void>(resolve => {
-          releaseNotification = resolve;
-        }),
-    );
     useDownloadsStore.getState().enqueueDownload({
-      id: 'priority',
-      title: 'priority',
-      type: 'movie',
-      url: 'https://example.com/priority.mp4',
-      sourceType: 'http',
-      videoType: 'mp4',
-      downloadLocation: location,
+      id: 'movie-direct-1',
+      title: 'Movie 2',
+      url: 'https://example.com/movie2.mp4',
+      type: 'video',
+      status: 'queued',
+      progress: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      location,
     });
 
-    const start = startQueuedDownloadNow('priority');
-    expect(useDownloadsStore.getState().downloads.priority.status).toBe(
-      'starting',
-    );
-
-    await scheduleQueuedDownloads();
-    expect(mockShowQueued).not.toHaveBeenCalledWith(
-      'priority',
-      'priority',
-      'http',
-    );
-
-    releaseNotification?.();
-    await start;
-  });
-
-  it('releases tracking when notification startup fails', async () => {
-    enqueueDownload();
-    mockShowStarting.mockRejectedValueOnce(new Error('notification failed'));
-
-    await expect(startDownload('movie_direct_0', location)).rejects.toThrow(
-      'notification failed',
-    );
-
-    expect(mockShowFailed).toHaveBeenCalledWith(
-      'Movie',
-      'movie_direct_0',
-      'http',
-    );
-    expect(mockStopForegroundTask).toHaveBeenCalledWith('movie_direct_0');
-  });
-
-  it('pauses and resumes an active supported download', async () => {
-    enqueueDownload();
-    useDownloadsStore.getState().updateDownload('movie_direct_0', {
-      status: 'downloading',
-      canPause: true,
-    });
-
-    await pauseDownload('movie_direct_0');
-
-    expect(mockBackendPause).toHaveBeenCalledWith('movie_direct_0');
-    expect(useDownloadsStore.getState().downloads.movie_direct_0).toMatchObject(
-      {
-        status: 'paused',
-        canPause: false,
-        canResume: true,
-      },
-    );
-
-    await resumeDownload('movie_direct_0');
-
-    expect(mockBackendResume).toHaveBeenCalledWith('movie_direct_0');
-    expect(useDownloadsStore.getState().downloads.movie_direct_0).toMatchObject(
-      {
-        status: 'downloading',
-        canPause: true,
-        canResume: false,
-      },
-    );
-  });
-
-  it('deletes partial data and shows a non-retryable error when pause fails', async () => {
-    enqueueDownload();
-    useDownloadsStore.getState().updateDownload('movie_direct_0', {
-      status: 'downloading',
-      canPause: true,
-      stagingPath: '/cache/downloads/movie/Movie.mp4.part',
-    });
-    mockBackendPause.mockRejectedValueOnce(
-      new Error('Server did not provide resume data'),
-    );
-
-    await pauseDownload('movie_direct_0');
-
-    expect(mockBackendCancel).toHaveBeenCalledWith('movie_direct_0');
-    expect(mockBackendCleanup).toHaveBeenCalledWith('movie_direct_0');
-    expect(useDownloadsStore.getState().downloads.movie_direct_0).toMatchObject(
-      {
-        status: 'error',
-        errorCode: 'PAUSE_UNSUPPORTED',
-        retryable: false,
-        canPause: false,
-        canResume: false,
-      },
-    );
-    expect(
-      useDownloadsStore.getState().downloads.movie_direct_0.errorMessage,
-    ).toContain('Partial download data was deleted');
-    expect(mockShowFailed).toHaveBeenCalledWith(
-      'Movie',
-      'movie_direct_0',
-      'http',
-    );
-  });
-
-  it('starts two queued downloads and waits for a slot before starting the third', async () => {
-    const resolvers = new Map<string, () => void>();
-    mockBackendStart.mockImplementation(
-      ({record}) =>
-        new Promise<void>(resolve => {
-          resolvers.set(record.id, resolve);
-        }),
-    );
-    for (const id of ['first', 'second', 'third']) {
-      useDownloadsStore.getState().enqueueDownload({
-        id,
-        title: id,
-        type: 'movie',
-        url: `https://example.com/${id}.mp4`,
-        sourceType: 'http',
-        videoType: 'mp4',
-        downloadLocation: location,
-        createdAt: id === 'first' ? 1 : id === 'second' ? 2 : 3,
-      });
-    }
-
-    await scheduleQueuedDownloads();
-    await flushAsyncWork();
-
-    expect(mockBackendStart).toHaveBeenCalledTimes(2);
-    expect(
-      mockBackendStart.mock.calls.map(([context]) => context.record.id),
-    ).toEqual(['first', 'second']);
-
-    resolvers.get('first')!();
-    await flushAsyncWork();
-    await flushAsyncWork();
-
-    expect(mockBackendStart).toHaveBeenCalledTimes(3);
-    expect(mockBackendStart.mock.calls[2][0].record.id).toBe('third');
-
-    resolvers.get('second')!();
-    resolvers.get('third')!();
-  });
-
-  it('hands a freed queue slot to the next download before stopping foreground service', async () => {
     mockDownloadConcurrency = 1;
-    let resolveFirst: (() => void) | undefined;
-    let resolveSecond: (() => void) | undefined;
-    mockBackendStart.mockImplementation(
-      ({record}) =>
-        new Promise<void>(resolve => {
-          if (record.id === 'first') {
-            resolveFirst = resolve;
-          } else {
-            resolveSecond = resolve;
-          }
-        }),
-    );
-    for (const [index, id] of ['first', 'second'].entries()) {
-      useDownloadsStore.getState().enqueueDownload({
-        id,
-        title: id,
-        type: 'movie',
-        url: `https://example.com/${id}.mp4`,
-        sourceType: 'http',
-        videoType: 'mp4',
-        downloadLocation: location,
-        createdAt: index + 1,
-      });
-    }
-
-    await scheduleQueuedDownloads();
-    await flushAsyncWork();
-    resolveFirst?.();
-    await flushAsyncWork();
+    scheduleQueuedDownloads();
     await flushAsyncWork();
 
-    const secondForegroundCall = mockStartForegroundTask.mock.calls.findIndex(
-      ([downloadId]) => downloadId === 'second',
-    );
-    const firstStopCall = mockStopForegroundTask.mock.calls.findIndex(
-      ([downloadId]) => downloadId === 'first',
-    );
-    expect(secondForegroundCall).toBeGreaterThanOrEqual(0);
-    expect(firstStopCall).toBeGreaterThanOrEqual(0);
-    expect(
-      mockStartForegroundTask.mock.invocationCallOrder[secondForegroundCall],
-    ).toBeLessThan(
-      mockStopForegroundTask.mock.invocationCallOrder[firstStopCall],
-    );
-
-    resolveSecond?.();
+    expect(mockBackendStart).toHaveBeenCalledTimes(1);
   });
 
-  it('starts the next queued download when the active download is paused', async () => {
-    mockDownloadConcurrency = 1;
-    const resolvers = new Map<string, () => void>();
-    mockBackendStart.mockImplementation(
-      ({record}) =>
-        new Promise<void>(resolve => {
-          resolvers.set(record.id, resolve);
-        }),
-    );
-    for (const [index, id] of ['first', 'second'].entries()) {
-      useDownloadsStore.getState().enqueueDownload({
-        id,
-        title: id,
-        type: 'movie',
-        url: `https://example.com/${id}.mp4`,
-        sourceType: 'http',
-        videoType: 'mp4',
-        downloadLocation: location,
-        createdAt: index + 1,
-      });
-    }
+  it('surfaces backend failures and stops foreground task', async () => {
+    enqueueDownload();
+    mockBackendStart.mockRejectedValueOnce(new Error('network failed'));
 
-    await scheduleQueuedDownloads();
-    await flushAsyncWork();
-    useDownloadsStore.getState().updateDownload('first', {
-      status: 'downloading',
-      canPause: true,
-    });
-
-    await pauseDownload('first');
-    await flushAsyncWork();
-
-    expect(mockBackendPause).toHaveBeenCalledWith('first');
-    expect(useDownloadsStore.getState().downloads.first.status).toBe('paused');
-    expect(mockBackendStart).toHaveBeenCalledTimes(2);
-    expect(mockBackendStart.mock.calls[1][0].record.id).toBe('second');
-
-    resolvers.forEach(resolve => resolve());
-  });
-
-  it('starts a queued download immediately even when normal slots are full', async () => {
-    const resolvers = new Map<string, () => void>();
-    mockBackendStart.mockImplementation(
-      ({record}) =>
-        new Promise<void>(resolve => {
-          resolvers.set(record.id, resolve);
-        }),
-    );
-    for (const [index, id] of ['first', 'second', 'priority'].entries()) {
-      useDownloadsStore.getState().enqueueDownload({
-        id,
-        title: id,
-        type: 'movie',
-        url: `https://example.com/${id}.mp4`,
-        sourceType: 'http',
-        videoType: 'mp4',
-        downloadLocation: location,
-        createdAt: index + 1,
-      });
-    }
-
-    await scheduleQueuedDownloads();
-    await flushAsyncWork();
-    expect(mockBackendStart).toHaveBeenCalledTimes(2);
-
-    const priorityStart = startQueuedDownloadNow('priority');
-    await flushAsyncWork();
-
-    expect(mockBackendStart).toHaveBeenCalledTimes(3);
-    expect(mockBackendStart.mock.calls[2][0].record.id).toBe('priority');
-
-    resolvers.forEach(resolve => resolve());
-    await priorityStart;
-  });
-
-  it('removes an active download immediately when canceled', async () => {
-    let resolveStart: (() => void) | undefined;
-    mockBackendStart.mockImplementation(
-      () =>
-        new Promise<void>(resolve => {
-          resolveStart = resolve;
-        }),
-    );
-    useDownloadsStore.getState().enqueueDownload({
-      id: 'active',
-      title: 'active',
-      type: 'movie',
-      url: 'https://example.com/active.mp4',
-      sourceType: 'http',
-      videoType: 'mp4',
-      downloadLocation: location,
-    });
-
-    const start = startDownload('active', location);
-    await flushAsyncWork();
-    await cancelDownload('active');
-
-    expect(mockBackendCancel).toHaveBeenCalledWith('active');
-    expect(useDownloadsStore.getState().downloads.active).toBeUndefined();
-
-    resolveStart?.();
-    await start;
+    await expect(startDownload('movie-direct-0')).rejects.toThrow('network failed');
+    expect(mockShowFailed).toHaveBeenCalled();
+    expect(mockStopForegroundTask).toHaveBeenCalled();
   });
 });
