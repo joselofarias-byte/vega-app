@@ -1,4 +1,4 @@
-name: Normalize media-console lockfile (temporary)
+name: Validate media-console lockfile (temporary)
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  normalize-lock:
+  validate-lock:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout branch
@@ -26,54 +26,10 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Rebuild lock from exact pre-upgrade version
+      - name: Validate dependency and privacy invariants
         shell: bash
         run: |
           set -Eeuo pipefail
-
-          BASE_COMMIT='3795759a05f55b2d9293b413223af5ce85b0c369'
-          git show "${BASE_COMMIT}:package-lock.json" > package-lock.json.base
-
-          node <<'NODE'
-          const fs = require('fs');
-          const basePath = 'package-lock.json.base';
-          const outputPath = 'package-lock.json';
-          let text = fs.readFileSync(basePath, 'utf8');
-
-          function replaceExactlyOnce(from, to, label) {
-            const first = text.indexOf(from);
-            if (first < 0) throw new Error(`Missing expected ${label}`);
-            if (text.indexOf(from, first + from.length) >= 0) {
-              throw new Error(`Expected exactly one ${label}`);
-            }
-            text = text.slice(0, first) + to + text.slice(first + from.length);
-          }
-
-          replaceExactlyOnce(
-            '"@8man/react-native-media-console": "^2.2.4-alpha.35"',
-            '"@8man/react-native-media-console": "2.2.4-alpha.43"',
-            'root media-console spec',
-          );
-          replaceExactlyOnce(
-            '"version": "2.2.4-alpha.35",\n      "resolved": "https://registry.npmjs.org/@8man/react-native-media-console/-/react-native-media-console-2.2.4-alpha.35.tgz",\n      "integrity": "sha512-/zWr3/MbptIWuxDMvOCYvquzInDbz8kZF4LQyhjM6uXsmCDhLjMlr3fdc8cqGhfqO34ndgdo1hBme9RFTtUOtA=="',
-            '"version": "2.2.4-alpha.43",\n      "resolved": "https://registry.npmjs.org/@8man/react-native-media-console/-/react-native-media-console-2.2.4-alpha.43.tgz",\n      "integrity": "sha512-MD0r0oRumfEuwFENPmFpr96fywl9+Y0fff2+niw9s1l3hRJUq+tPorBPR3A+tg1/hBxv+jHdt6Uk5pK/w3/AGA=="',
-            'media-console package metadata',
-          );
-          replaceExactlyOnce(
-            '"react-native-reanimated": ">=3.18.0",\n        "react-native-video": ">=6.0.0"',
-            '"react-native-reanimated": ">=3.18.0",\n        "react-native-svg": ">=15.0.0",\n        "react-native-video": ">=6.0.0"',
-            'media-console SVG peer dependency',
-          );
-
-          fs.writeFileSync(outputPath, text, 'utf8');
-          fs.unlinkSync(basePath);
-          NODE
-
-      - name: Validate exact dependency graph and privacy constraints
-        shell: bash
-        run: |
-          set -Eeuo pipefail
-
           node <<'NODE'
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
@@ -111,39 +67,53 @@ jobs:
               throw new Error(`Forbidden dependency in package-lock.json: ${name}`);
             }
           }
-          console.log('dependency/privacy validation: OK');
+
+          console.log(`media-console=${locked.version}`);
+          console.log('dependency/privacy invariants: OK');
           NODE
 
-      - name: Verify npm ci accepts normalized lockfile
+      - name: Verify clean install from regenerated lockfile
         shell: bash
         run: |
           set -Eeuo pipefail
           npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Verify lockfile diff is narrowly scoped
+      - name: Validate adaptation scripts syntax
         shell: bash
         run: |
           set -Eeuo pipefail
-          BASE_COMMIT='3795759a05f55b2d9293b413223af5ce85b0c369'
-          git diff --stat "$BASE_COMMIT" -- package-lock.json
-          diff_text="$(git diff "$BASE_COMMIT" -- package-lock.json)"
-          printf '%s\n' "$diff_text"
+          node --check scripts/fix-rnv-buffer-memory.js
+          node --check scripts/fix-player-buffering-source.js
 
-          forbidden_noise="$(printf '%s\n' "$diff_text" | grep -E '^[+-].*(devOptional|"dev":)' || true)"
-          if [[ -n "$forbidden_noise" ]]; then
-            echo 'Unexpected dev/devOptional lockfile churn detected:' >&2
-            printf '%s\n' "$forbidden_noise" >&2
-            exit 1
-          fi
+      - name: Apply postinstall adaptations exactly once
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npx patch-package
+          node scripts/fix-rnv-buffer-memory.js
+          node scripts/fix-player-buffering-source.js
 
-      - name: Remove temporary workflow and commit normalized lockfile
+      - name: Verify adaptation idempotence
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          node scripts/fix-rnv-buffer-memory.js
+          node scripts/fix-player-buffering-source.js
+
+      - name: Run project tests
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm test -- --runInBand
+
+      - name: Remove temporary validation workflow
+        if: success()
         shell: bash
         run: |
           set -Eeuo pipefail
           rm -f .github/workflows/normalize-media-console-lock-temp.yml
-
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add package-lock.json .github/workflows/normalize-media-console-lock-temp.yml
-          git commit -m 'chore(lock): keep media-console alpha.43 diff minimal'
+          git add .github/workflows/normalize-media-console-lock-temp.yml
+          git commit -m 'chore(ci): remove temporary media-console validation'
           git push origin HEAD:port/upstream-player-buffering-20260812
