@@ -2,6 +2,18 @@
  * @format
  */
 
+jest.mock('react-native-image-colors', () => ({
+  cache: {removeItem: jest.fn()},
+  getColors: jest.fn(async () => ({
+    platform: 'android',
+    lightVibrant: '#FFFFFF',
+    vibrant: '#FFFFFF',
+    dominant: '#FFFFFF',
+    average: '#FFFFFF',
+    darkVibrant: '#FFFFFF',
+  })),
+}));
+
 import 'react-native';
 import React from 'react';
 import App from '../src/App';
