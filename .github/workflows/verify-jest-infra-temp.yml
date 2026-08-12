@@ -31,6 +31,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
+          import re
           import subprocess
           from pathlib import Path
 
@@ -67,6 +68,26 @@ jobs:
           if data.count(storage_old) != 1:
               raise SystemExit('unexpected lifecycle storage mock shape')
           data = data.replace(storage_old, storage_new, 1)
+
+          for mock_name, expected_count in (
+              (b'mockShowComplete', 2),
+              (b'mockShowStarting', 1),
+              (b'mockShowFailed', 2),
+          ):
+              pattern = re.compile(
+                  rb'(expect\(' + mock_name + rb'\)\.toHaveBeenCalledWith\(\r\n'
+                  rb"      'Movie',\r\n"
+                  rb"      'movie_direct_0',\r\n"
+                  rb"      'http',\r\n)"
+                  rb'(    \);)'
+              )
+              matches = list(pattern.finditer(data))
+              if len(matches) != expected_count:
+                  raise SystemExit(
+                      f'{mock_name.decode()}: expected {expected_count} three-argument assertions, found {len(matches)}'
+                  )
+              data = pattern.sub(rb"\1      '#FFFFFF',\r\n\2", data)
+
           Path(path).write_bytes(data)
           if b'\r\n' not in data:
               raise SystemExit('CRLF preservation failed')
@@ -98,6 +119,13 @@ jobs:
               """    expect(\n      tree!.root.findByProps({testID: 'app-dialog-title'}).props.children,\n    ).toBe('Uninstall Provider');""",
               """    expect(\n      tree!.root.findAll(\n        node => node.props.children === 'Uninstall Provider',\n      ).length,\n    ).toBeGreaterThan(0);""",
               'Extensions uninstall title assertion',
+          )
+
+          replace_once(
+              '__tests__/Extensions.test.tsx',
+              """      tree!.root\n        .findByProps({testID: 'confirm-uninstall-existing'})\n        .props.onPress();""",
+              """      tree!.root\n        .findAll(\n          node =>\n            node.props.testID === 'confirm-uninstall-existing' &&\n            typeof node.props.onPress === 'function',\n        )[0]\n        .props.onPress();""",
+              'Extensions Compose confirmation interaction',
           )
 
           replace_once(
@@ -159,6 +187,7 @@ jobs:
             jest.config.js \
             __mocks__/expo-vector-icons.js \
             __mocks__/expo-ui-jetpack-compose.js \
+            __mocks__/react-native-mmkv-storage.js \
             __tests__/downloadManagerLifecycle.test.ts \
             __tests__/DownloadBottomSheet.test.tsx \
             __tests__/Extensions.test.tsx \
