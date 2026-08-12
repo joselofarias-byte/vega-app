@@ -1,0 +1,142 @@
+name: Normalize media-console lockfile (temporary)
+
+on:
+  push:
+    branches:
+      - port/upstream-player-buffering-20260812
+    paths:
+      - .github/workflows/normalize-media-console-lock-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  normalize-lock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: port/upstream-player-buffering-20260812
+          fetch-depth: 2
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Rebuild lock from pre-upgrade version with exact minimal replacements
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          git show HEAD~2:package-lock.json > package-lock.json.base
+
+          node <<'NODE'
+          const fs = require('fs');
+          const basePath = 'package-lock.json.base';
+          const outputPath = 'package-lock.json';
+          let text = fs.readFileSync(basePath, 'utf8');
+
+          function replaceExactlyOnce(from, to, label) {
+            const first = text.indexOf(from);
+            if (first < 0) throw new Error(`Missing expected ${label}`);
+            if (text.indexOf(from, first + from.length) >= 0) {
+              throw new Error(`Expected exactly one ${label}`);
+            }
+            text = text.slice(0, first) + to + text.slice(first + from.length);
+          }
+
+          replaceExactlyOnce(
+            '"@8man/react-native-media-console": "^2.2.4-alpha.35"',
+            '"@8man/react-native-media-console": "2.2.4-alpha.43"',
+            'root media-console spec',
+          );
+          replaceExactlyOnce(
+            '"version": "2.2.4-alpha.35",\n      "resolved": "https://registry.npmjs.org/@8man/react-native-media-console/-/react-native-media-console-2.2.4-alpha.35.tgz",\n      "integrity": "sha512-/zWr3/MbptIWuxDMvOCYvquzInDbz8kZF4LQyhjM6uXsmCDhLjMlr3fdc8cqGhfqO34ndgdo1hBme9RFTtUOtA=="',
+            '"version": "2.2.4-alpha.43",\n      "resolved": "https://registry.npmjs.org/@8man/react-native-media-console/-/react-native-media-console-2.2.4-alpha.43.tgz",\n      "integrity": "sha512-MD0r0oRumfEuwFENPmFpr96fywl9+Y0fff2+niw9s1l3hRJUq+tPorBPR3A+tg1/hBxv+jHdt6Uk5pK/w3/AGA=="',
+            'media-console package metadata',
+          );
+          replaceExactlyOnce(
+            '"react-native-reanimated": ">=3.18.0",\n        "react-native-video": ">=6.0.0"',
+            '"react-native-reanimated": ">=3.18.0",\n        "react-native-svg": ">=15.0.0",\n        "react-native-video": ">=6.0.0"',
+            'media-console SVG peer dependency',
+          );
+
+          fs.writeFileSync(outputPath, text, 'utf8');
+          fs.unlinkSync(basePath);
+          NODE
+
+      - name: Validate exact dependency graph and privacy constraints
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          node <<'NODE'
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+          const expected = '2.2.4-alpha.43';
+          const locked = lock.packages?.['node_modules/@8man/react-native-media-console'];
+
+          if (pkg.version !== '4.0.3' || lock.version !== '4.0.3') {
+            throw new Error('Application version changed unexpectedly');
+          }
+          if (pkg.dependencies?.['@8man/react-native-media-console'] !== expected) {
+            throw new Error('package.json media-console spec mismatch');
+          }
+          if (lock.packages?.['']?.dependencies?.['@8man/react-native-media-console'] !== expected) {
+            throw new Error('package-lock root media-console spec mismatch');
+          }
+          if (locked?.version !== expected) {
+            throw new Error(`Locked media-console is ${locked?.version || 'missing'}`);
+          }
+          if (locked?.peerDependencies?.['react-native-svg'] !== '>=15.0.0') {
+            throw new Error('media-console SVG peer dependency missing');
+          }
+
+          const forbidden = [
+            '@react-native-firebase/app',
+            '@react-native-firebase/analytics',
+            '@react-native-firebase/crashlytics',
+            'react-native-google-cast',
+          ];
+          for (const name of forbidden) {
+            if (Object.prototype.hasOwnProperty.call(pkg.dependencies || {}, name)) {
+              throw new Error(`Forbidden dependency in package.json: ${name}`);
+            }
+            if (Object.prototype.hasOwnProperty.call(lock.packages || {}, `node_modules/${name}`)) {
+              throw new Error(`Forbidden dependency in package-lock.json: ${name}`);
+            }
+          }
+          console.log('dependency/privacy validation: OK');
+          NODE
+
+      - name: Verify npm ci accepts the normalized lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify lockfile diff is narrowly scoped
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          git diff --stat -- package-lock.json
+          git diff -- package-lock.json
+
+          changes="$(git diff --numstat -- package-lock.json)"
+          [[ -n "$changes" ]] || { echo 'Expected package-lock.json changes'; exit 1; }
+
+      - name: Remove temporary workflow and commit normalized lockfile
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          rm -f .github/workflows/normalize-media-console-lock-temp.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package-lock.json .github/workflows/normalize-media-console-lock-temp.yml
+          git commit -m 'chore(lock): keep media-console alpha.43 diff minimal'
+          git push origin HEAD:port/upstream-player-buffering-20260812
