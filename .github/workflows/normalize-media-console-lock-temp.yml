@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: port/upstream-player-buffering-20260812
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -26,12 +26,13 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Rebuild lock from pre-upgrade version with exact minimal replacements
+      - name: Rebuild lock from exact pre-upgrade version
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          git show HEAD~2:package-lock.json > package-lock.json.base
+          BASE_COMMIT='3795759a05f55b2d9293b413223af5ce85b0c369'
+          git show "${BASE_COMMIT}:package-lock.json" > package-lock.json.base
 
           node <<'NODE'
           const fs = require('fs');
@@ -113,7 +114,7 @@ jobs:
           console.log('dependency/privacy validation: OK');
           NODE
 
-      - name: Verify npm ci accepts the normalized lockfile
+      - name: Verify npm ci accepts normalized lockfile
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -123,11 +124,17 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          git diff --stat -- package-lock.json
-          git diff -- package-lock.json
+          BASE_COMMIT='3795759a05f55b2d9293b413223af5ce85b0c369'
+          git diff --stat "$BASE_COMMIT" -- package-lock.json
+          diff_text="$(git diff "$BASE_COMMIT" -- package-lock.json)"
+          printf '%s\n' "$diff_text"
 
-          changes="$(git diff --numstat -- package-lock.json)"
-          [[ -n "$changes" ]] || { echo 'Expected package-lock.json changes'; exit 1; }
+          forbidden_noise="$(printf '%s\n' "$diff_text" | grep -E '^[+-].*(devOptional|"dev":)' || true)"
+          if [[ -n "$forbidden_noise" ]]; then
+            echo 'Unexpected dev/devOptional lockfile churn detected:' >&2
+            printf '%s\n' "$forbidden_noise" >&2
+            exit 1
+          fi
 
       - name: Remove temporary workflow and commit normalized lockfile
         shell: bash
