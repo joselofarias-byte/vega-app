@@ -35,10 +35,10 @@ jobs:
           const fs = require('fs');
           const path = 'package.json';
           const pkg = JSON.parse(fs.readFileSync(path, 'utf8'));
-          const expected = '^2.2.4-alpha.35';
-          const next = '^2.2.4-alpha.43';
+          const previous = '^2.2.4-alpha.35';
+          const next = '2.2.4-alpha.43';
           const current = pkg.dependencies?.['@8man/react-native-media-console'];
-          if (current !== expected && current !== next) {
+          if (current !== previous && current !== next) {
             throw new Error(`Unexpected media-console dependency: ${current}`);
           }
           pkg.dependencies['@8man/react-native-media-console'] = next;
@@ -56,19 +56,19 @@ jobs:
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           const lock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-          const expected = '^2.2.4-alpha.43';
+          const expected = '2.2.4-alpha.43';
           const locked = lock.packages?.['node_modules/@8man/react-native-media-console'];
 
           if (pkg.version !== '4.0.3' || lock.version !== '4.0.3') {
             throw new Error('Application version changed unexpectedly');
           }
           if (pkg.dependencies?.['@8man/react-native-media-console'] !== expected) {
-            throw new Error('package.json media-console spec is not alpha.43');
+            throw new Error('package.json media-console spec is not exact alpha.43');
           }
           if (lock.packages?.['']?.dependencies?.['@8man/react-native-media-console'] !== expected) {
-            throw new Error('package-lock root media-console spec is not alpha.43');
+            throw new Error('package-lock root media-console spec is not exact alpha.43');
           }
-          if (locked?.version !== '2.2.4-alpha.43') {
+          if (locked?.version !== expected) {
             throw new Error(`Locked media-console is ${locked?.version || 'missing'}`);
           }
 
