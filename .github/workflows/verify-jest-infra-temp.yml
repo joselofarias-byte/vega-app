@@ -10,6 +10,7 @@ on:
       - __tests__/downloadManagerLifecycle.test.ts
       - __tests__/DownloadBottomSheet.test.tsx
       - __tests__/App.test.tsx
+      - src/components/AppDialog.tsx
       - .github/workflows/verify-jest-infra-temp.yml
 
 permissions:
@@ -25,7 +26,7 @@ jobs:
           ref: port/upstream-player-buffering-20260812
           fetch-depth: 0
 
-      - name: Normalize lifecycle fixture from exact pre-edit blob
+      - name: Normalize and align Jest fixtures
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -38,8 +39,8 @@ jobs:
           data = subprocess.check_output(['git', 'show', f'{base}:{path}'])
           needle = b'let mockDownloadConcurrency = 2;\r\n\r\n'
           if data.count(needle) != 1:
-              raise SystemExit(f'expected one insertion point, found {data.count(needle)}')
-          mock = (
+              raise SystemExit(f'expected one lifecycle insertion point, found {data.count(needle)}')
+          native_mock = (
               b"jest.mock('react-native-image-colors', () => ({\r\n"
               b"  cache: {removeItem: jest.fn()},\r\n"
               b"  getColors: jest.fn(async () => ({\r\n"
@@ -52,16 +53,68 @@ jobs:
               b"  })),\r\n"
               b"}));\r\n\r\n"
           )
-          data = data.replace(needle, needle + mock, 1)
-          Path(path).write_bytes(data)
-          PY
+          data = data.replace(needle, needle + native_mock, 1)
 
-          python3 - <<'PY'
-          from pathlib import Path
-          data = Path('__tests__/downloadManagerLifecycle.test.ts').read_bytes()
+          storage_old = (
+              b'    getDownloadConcurrency: () => mockDownloadConcurrency,\r\n'
+              b'    setDownloadLocation: jest.fn(),\r\n'
+          )
+          storage_new = (
+              b'    getDownloadConcurrency: () => mockDownloadConcurrency,\r\n'
+              b"    getPrimaryColor: () => '#FFFFFF',\r\n"
+              b'    setDownloadLocation: jest.fn(),\r\n'
+          )
+          if data.count(storage_old) != 1:
+              raise SystemExit('unexpected lifecycle storage mock shape')
+          data = data.replace(storage_old, storage_new, 1)
+          Path(path).write_bytes(data)
           if b'\r\n' not in data:
               raise SystemExit('CRLF preservation failed')
-          print('lifecycle fixture restored with CRLF and one native facade mock')
+
+          def replace_once(path, old, new, label):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected once, found {count}')
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              '__tests__/DownloadBottomSheet.test.tsx',
+              "snapPoints: ['30%', 450],",
+              "snapPoints: ['55%', '82%'],",
+              'bottom-sheet snap point expectation',
+          )
+
+          replace_once(
+              '__tests__/Extensions.test.tsx',
+              """    expect(\n      tree!.root.findByProps({testID: 'app-dialog-title'}).props.children,\n    ).toBe('Error');\n    expect(\n      tree!.root.findByProps({testID: 'app-dialog-message'}).props.children,\n    ).toBe('Failed to install provider. Please try again.');""",
+              """    expect(\n      tree!.root.findAll(node => node.props.children === 'Error').length,\n    ).toBeGreaterThan(0);\n    expect(\n      tree!.root.findAll(\n        node =>\n          node.props.children ===\n          'Failed to install provider. Please try again.',\n      ).length,\n    ).toBeGreaterThan(0);""",
+              'Extensions install error assertions',
+          )
+
+          replace_once(
+              '__tests__/Extensions.test.tsx',
+              """    expect(\n      tree!.root.findByProps({testID: 'app-dialog-title'}).props.children,\n    ).toBe('Uninstall Provider');""",
+              """    expect(\n      tree!.root.findAll(\n        node => node.props.children === 'Uninstall Provider',\n      ).length,\n    ).toBeGreaterThan(0);""",
+              'Extensions uninstall title assertion',
+          )
+
+          replace_once(
+              'src/components/AppDialog.tsx',
+              """              <TextButton\n                enabled={!dismissAction.disabled}\n                onClick={() => handleAction(dismissAction)}""",
+              """              <TextButton\n                testID={dismissAction.testID}\n                enabled={!dismissAction.disabled}\n                onClick={() => handleAction(dismissAction)}""",
+              'dismiss action testID propagation',
+          )
+
+          replace_once(
+              'src/components/AppDialog.tsx',
+              """              <TextButton\n                enabled={!confirmAction.disabled}\n                onClick={() => handleAction(confirmAction)}""",
+              """              <TextButton\n                testID={confirmAction.testID}\n                enabled={!confirmAction.disabled}\n                onClick={() => handleAction(confirmAction)}""",
+              'confirm action testID propagation',
+          )
+
+          print('fixture/UI contract alignment complete')
           PY
 
       - name: Set up Node 22
@@ -108,6 +161,8 @@ jobs:
             __mocks__/expo-ui-jetpack-compose.js \
             __tests__/downloadManagerLifecycle.test.ts \
             __tests__/DownloadBottomSheet.test.tsx \
+            __tests__/Extensions.test.tsx \
+            src/components/AppDialog.tsx \
             .github/workflows/verify-jest-infra-temp.yml
-          git commit -m 'test: align Jest with current RN and Expo facades'
+          git commit -m 'test: align Jest with current RN and Expo contracts'
           git push origin HEAD:port/upstream-player-buffering-20260812
