@@ -42,7 +42,6 @@ function withCustomNativeModules(config) {
             const sourceFile = path.join(sourceDir, file);
             const targetFile = path.join(targetDir, file);
 
-            // Read the file and update the package name
             let content = fs.readFileSync(sourceFile, 'utf8');
             content = content.replace(
               /^package com\.vega$/m,
@@ -64,6 +63,7 @@ function withCustomNativeModules(config) {
 
     const packagesToAdd = [
       'DohPackage()',
+      'HttpDownloadPackage()',
       'TorrentPackage()',
       'LauncherIconPackage()',
     ];
@@ -78,10 +78,7 @@ function withCustomNativeModules(config) {
     }
 
     // Register DohOkHttpFactory with OkHttpClientProvider in onCreate
-    const factoryLine =
-      'OkHttpClientProvider.setOkHttpClientFactory(DohOkHttpFactory(cacheDir))';
     if (!currentContents.includes('setOkHttpClientFactory')) {
-      // Add the import if missing
       if (
         !currentContents.includes(
           'import com.facebook.react.modules.network.OkHttpClientProvider',
@@ -94,7 +91,6 @@ function withCustomNativeModules(config) {
         );
       }
 
-      // Inject factory registration after loadReactNative(this)
       currentContents = currentContents.replace(
         /loadReactNative\(this\)\n/,
         match =>
@@ -110,13 +106,18 @@ function withCustomNativeModules(config) {
   config = withAppBuildGradle(config, cfg => {
     let contents = cfg.modResults.contents;
 
-    // Add okhttp-dnsoverhttps if not present
     if (!contents.includes('okhttp-dnsoverhttps')) {
-      // Find the dependencies block
       contents = contents.replace(
         /dependencies\s*\{/,
         match =>
           `${match}\n    implementation 'com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0'\n`,
+      );
+    }
+
+    if (!contents.includes('com.squareup.okhttp3:okhttp:4.12.0')) {
+      contents = contents.replace(
+        /dependencies\s*\{/,
+        match => `${match}\n    implementation 'com.squareup.okhttp3:okhttp:4.12.0'\n`,
       );
     }
 
