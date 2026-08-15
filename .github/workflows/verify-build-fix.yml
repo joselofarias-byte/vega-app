@@ -18,10 +18,8 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Synchronize lockfile in workspace
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Install JS dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm install --legacy-peer-deps --no-audit --no-fund
       - name: Generate Android native project
         run: npx expo prebuild --platform android --clean --no-install
       - name: Build debug APK
@@ -29,7 +27,7 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon --stacktrace
-      - name: Upload APK and synchronized lockfile
+      - name: Upload APK and resolved lockfile
         uses: actions/upload-artifact@v4
         with:
           name: vega-build-fix
