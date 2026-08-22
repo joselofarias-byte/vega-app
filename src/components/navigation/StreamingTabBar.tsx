@@ -28,8 +28,8 @@ const StreamingTabBar = ({
 }: BottomTabBarProps) => {
   const colors = useM3Colors();
   const insets = useSafeAreaInsets();
-  const {width: windowWidth} = useWindowDimensions();
-  const isNavigationRail = windowWidth > 768;
+  const {width: windowWidth, height: windowHeight} = useWindowDimensions();
+  const isNavigationRail = Math.min(windowWidth, windowHeight) >= 600;
   const showLabels = settingsStorage.showTabBarLabels();
 
   return (
