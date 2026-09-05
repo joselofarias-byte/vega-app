@@ -126,3 +126,45 @@ export const buildCookieString = (map: Record<string, string>): string =>
   Object.entries(map)
     .map(([name, value]) => `${name}=${value}`)
     .join('; ');
+
+// Syncs a Cookie/Set-Cookie string with the native Android cookie jar.
+export const setCookieString = async (
+  url: string,
+  cookieString: string,
+): Promise<void> => {
+  const CookieManager = getCookieManager();
+  if (!CookieManager || !cookieString) return;
+  try {
+    if (typeof CookieManager.setFromResponse === 'function') {
+      try {
+        await CookieManager.setFromResponse(url, cookieString);
+        await CookieManager.flush();
+        return;
+      } catch {}
+    }
+
+    const attributes = new Set([
+      'expires',
+      'max-age',
+      'path',
+      'domain',
+      'samesite',
+      'priority',
+      'secure',
+      'httponly',
+    ]);
+    const parts = cookieString.split(';').map(part => part.trim()).filter(Boolean);
+    for (const part of parts) {
+      const eqIndex = part.indexOf('=');
+      if (eqIndex <= 0) continue;
+      const name = part.slice(0, eqIndex).trim();
+      const value = part.slice(eqIndex + 1).trim();
+      if (name && value && !attributes.has(name.toLowerCase())) {
+        await CookieManager.set(url, {name, value, path: '/'});
+      }
+    }
+    await CookieManager.flush();
+  } catch (error) {
+    console.warn('[cookieManager] failed to set cookie string', error);
+  }
+};

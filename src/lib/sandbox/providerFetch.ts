@@ -1,6 +1,6 @@
 import axios, {type AxiosRequestConfig} from 'axios';
 import {headers as commonHeaders} from '../providers/headers';
-import {getCookieHeader} from '../services/cookieManager';
+import {getCookieHeader, setCookieString} from '../services/cookieManager';
 import {bytesToBase64, base64ToBytes} from './base64';
 import {providerRateLimiter} from './rateLimiter';
 import {
@@ -106,10 +106,13 @@ export const providerFetch = async (
     ) {
       headers['Content-Type'] = body.contentType;
     }
-    const nativeCookieHeader = await getCookieHeader(url.toString());
     const cookieKey = Object.keys(headers).find(
       key => key.toLowerCase() === 'cookie',
     );
+    if (cookieKey && headers[cookieKey]) {
+      await setCookieString(url.toString(), headers[cookieKey]);
+    }
+    const nativeCookieHeader = await getCookieHeader(url.toString());
     if (nativeCookieHeader) {
       if (cookieKey && headers[cookieKey]) {
         const suppliedCookieNames = new Set(

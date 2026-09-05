@@ -640,9 +640,12 @@ const SeasonList: React.FC<SeasonListProps> = ({
         downloadIndex,
       );
       const displayTitle =
-        activeSeason?.directLinks?.length && activeSeason.directLinks.length > 1
-          ? item.title
-          : 'Play';
+        item.title?.trim() ||
+        (activeSeason?.directLinks?.length && activeSeason.directLinks.length > 1
+          ? `${activeSeason?.title || 'Episode'} ${index + 1}`
+          : activeSeason?.title && activeSeason.title.toLowerCase() !== 'default'
+          ? activeSeason.title
+          : 'Play');
 
       return (
         <View
