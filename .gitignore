@@ -91,3 +91,10 @@ google-services.json
 #env
 .env
 .env.*
+
+# Local code intelligence
+/.codegraph/
+/.codegraph-*/
+
+# Local multi-LLM orchestration
+/.worktrees/
