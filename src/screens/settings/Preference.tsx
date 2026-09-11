@@ -6,6 +6,7 @@ import DownloadLocationPreference from './components/DownloadLocationPreference'
 import useNavigationPreferencesStore from '../../lib/zustand/navigationPreferencesStore';
 import DownloadConcurrencyPreference from './components/DownloadConcurrencyPreference';
 import TmdbApiKeyPreference from './components/TmdbApiKeyPreference';
+import LanguagePreferencesSection from './components/LanguagePreferencesSection';
 import AppText from '../../components/ui/Text';
 import SettingsSection from '../../components/ui/SettingsSection';
 import SettingsSwitchRow from '../../components/ui/SettingsSwitchRow';
@@ -14,9 +15,6 @@ import {useM3Colors} from '../../theme/M3PaletteContext';
 
 const Preferences = () => {
   const colors = useM3Colors();
-  // const [showRecentlyWatched, setShowRecentlyWatched] = useState(
-  //   settingsStorage.getBool('showRecentlyWatched') || false,
-  // );
   const [disableDrawer, setDisableDrawer] = useState(
     settingsStorage.getBool('disableDrawer') || false,
   );
@@ -66,7 +64,6 @@ const Preferences = () => {
   const [alwaysUseExternalDownload, setAlwaysUseExternalDownload] = useState(
     settingsStorage.getBool('alwaysExternalDownloader') || false,
   );
-
 
   return (
     <ScrollView
@@ -121,15 +118,6 @@ const Preferences = () => {
               setShowHamburgerMenu(next);
             }}
           />
-          {/* <SettingsSwitchRow
-            title="Recently watched"
-            description="Keep your resume rail on Home"
-            value={showRecentlyWatched}
-            onValueChange={next => {
-              settingsStorage.setBool('showRecentlyWatched', next);
-              setShowRecentlyWatched(next);
-            }}
-          /> */}
           <SettingsSwitchRow
             title="Disable drawer"
             value={disableDrawer}
@@ -149,7 +137,6 @@ const Preferences = () => {
             }}
           />
         </SettingsSection>
-
 
         <TmdbApiKeyPreference />
 
@@ -190,6 +177,8 @@ const Preferences = () => {
             }}
           />
         </SettingsSection>
+
+        <LanguagePreferencesSection />
 
         <DownloadLocationPreference primary={colors.primary} />
 
